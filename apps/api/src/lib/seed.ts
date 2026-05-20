@@ -1,0 +1,1 @@
+export { ensureSeedData } from "./repository";

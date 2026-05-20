@@ -1,0 +1,112 @@
+.page {
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.shell {
+  width: min(1080px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 24px;
+}
+
+.hero,
+.card,
+.note {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow);
+}
+
+.hero,
+.note {
+  padding: 32px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  margin-bottom: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero h1,
+.card h2,
+.note h2 {
+  letter-spacing: -0.04em;
+}
+
+.hero h1 {
+  font-size: clamp(2.1rem, 4vw, 4.2rem);
+  line-height: 0.96;
+}
+
+.hero p,
+.card p,
+.note p {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.inlineLink {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.actions {
+  margin-top: 24px;
+}
+
+.primaryLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
+  color: white;
+  background: linear-gradient(135deg, var(--accent), var(--teal));
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.card {
+  padding: 24px;
+  display: grid;
+  gap: 12px;
+}
+
+.supportList {
+  display: grid;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 18px;
+  }
+
+  .hero,
+  .card,
+  .note {
+    padding: 22px;
+  }
+}

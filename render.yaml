@@ -1,0 +1,79 @@
+services:
+  - type: web
+    name: smart-training-api
+    runtime: node
+    plan: starter
+    region: virginia
+    autoDeployTrigger: checksPass
+    healthCheckPath: /api/health
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build:api
+    preDeployCommand: pnpm --filter api db:migrate && pnpm seed
+    startCommand: pnpm --filter api exec next start --port $PORT
+    buildFilter:
+      paths:
+        - .node-version
+        - apps/api/**
+        - package.json
+        - packages/**
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - render.yaml
+        - tsconfig.json
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smart-training-db
+          property: connectionString
+      - key: APP_SESSION_SECRET
+        generateValue: true
+      - key: DATA_ENCRYPTION_KEY
+        generateValue: true
+      - key: SESSION_RETENTION_DAYS
+        value: "30"
+      - key: OPENAI_TEXT_ENABLED
+        value: "false"
+      - key: VOICE_LAB_ENABLED
+        value: "false"
+
+  - type: web
+    name: smart-training-web
+    runtime: node
+    plan: starter
+    region: virginia
+    autoDeployTrigger: checksPass
+    healthCheckPath: /privacy
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build:web
+    startCommand: pnpm --filter web exec next start --port $PORT
+    buildFilter:
+      paths:
+        - .node-version
+        - apps/web/**
+        - package.json
+        - packages/**
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - render.yaml
+        - tsconfig.json
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: INTERNAL_API_HOSTPORT
+        fromService:
+          type: web
+          name: smart-training-api
+          property: hostport
+      - key: NEXT_PUBLIC_SUPPORT_NAME
+        value: Smart Training Pilot Support
+      - key: NEXT_PUBLIC_SUPPORT_EMAIL
+        sync: false
+
+databases:
+  - name: smart-training-db
+    plan: basic-256mb
+    region: virginia
+    diskSizeGB: 15
+    storageAutoscalingEnabled: true

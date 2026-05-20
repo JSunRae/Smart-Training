@@ -1,0 +1,260 @@
+{
+  "scenarios": [
+    {
+      "key": "security-platform-rollout",
+      "title": "Security Platform Consolidation",
+      "description": "Practice a first-call conversation with a procurement-led buyer who is skeptical of security platform consolidation claims.",
+      "buyerCompany": "Northwind Manufacturing",
+      "buyerRole": "Head of Procurement",
+      "buyerTone": "Measured, cost-conscious, and resistant to vague ROI promises.",
+      "challenge": "Tool sprawl is increasing operating cost, but the buyer has seen failed consolidation programs before.",
+      "goal": "Earn agreement for a discovery workshop with procurement and security leadership.",
+      "openingLine": "Your email mentioned consolidation savings. I have heard that pitch before. Why should I believe this is different?"
+    },
+    {
+      "key": "revenue-ops-forecasting",
+      "title": "Revenue Forecast Discipline",
+      "description": "Practice reframing a forecasting problem for a sales operations leader who thinks the issue is only CRM hygiene.",
+      "buyerCompany": "Helios Cloud",
+      "buyerRole": "VP of Revenue Operations",
+      "buyerTone": "Analytical, pressed for time, and impatient with generic coaching advice.",
+      "challenge": "Forecast misses are hurting board confidence, but the buyer believes the root issue is just rep data entry.",
+      "goal": "Win a second meeting focused on forecast operating cadence.",
+      "openingLine": "If this is another CRM cleanup conversation, we can stop now. We already know reps need to update their fields."
+    },
+    {
+      "key": "change-management-adoption",
+      "title": "Change Management Adoption",
+      "description": "Practice a conversation with an enablement leader who needs proof that managers will actually adopt a new coaching workflow.",
+      "buyerCompany": "Arcwell Services",
+      "buyerRole": "Director of Sales Enablement",
+      "buyerTone": "Collaborative but wary of change fatigue.",
+      "challenge": "Managers are overloaded and prior enablement rollouts failed because frontline adoption never stuck.",
+      "goal": "Secure agreement on a pilot with two frontline teams.",
+      "openingLine": "The real issue is not content. It is whether managers will use the process after week one."
+    },
+    {
+      "key": "forecast-confidence-coaching",
+      "title": "Forecast Confidence Through Coaching",
+      "description": "Practice selling Smart Training to a RevOps leader who blames forecast misses on inspection rigor instead of rep conversation quality.",
+      "buyerCompany": "VectorPeak Cloud",
+      "buyerRole": "VP of Revenue Operations",
+      "buyerTone": "Analytical, tool-fatigued, and demanding causal proof.",
+      "challenge": "Late-stage deals keep slipping because discovery quality is inconsistent, but the buyer believes dashboards and exit criteria should solve the issue without more practice.",
+      "goal": "Secure a diagnostic working session tying practice data to stage quality and forecast risk.",
+      "openingLine": "Forecast accuracy is an inspection problem. Why are you trying to solve it with roleplay?"
+    },
+    {
+      "key": "frontline-coaching-consistency",
+      "title": "Frontline Coaching Consistency",
+      "description": "Practice selling Smart Training to a VP of Sales who thinks managers already coach enough and sees enablement as a soft investment.",
+      "buyerCompany": "SummitCore Software",
+      "buyerRole": "VP of Sales",
+      "buyerTone": "Direct, numbers-driven, skeptical of feel-good enablement projects.",
+      "challenge": "Managers say they coach, but rep behavior is inconsistent and late-stage deals stall because feedback only happens after live calls go wrong.",
+      "goal": "Secure agreement on a 30-day pilot for two frontline teams with manager scorecards.",
+      "openingLine": "If my managers are already reviewing calls, why would I buy another coaching tool?"
+    },
+    {
+      "key": "rep-ramp-time-compression",
+      "title": "Ramp Time Compression",
+      "description": "Practice selling Smart Training to a CRO who wants faster rep ramp without adding more passive onboarding content.",
+      "buyerCompany": "Northstar Infrastructure",
+      "buyerRole": "Chief Revenue Officer",
+      "buyerTone": "Strategic, impatient, focused on time-to-quota and hiring efficiency.",
+      "challenge": "New reps absorb product knowledge, but their first meaningful objection handling still happens on live deals, slowing ramp and increasing manager lift.",
+      "goal": "Win executive sponsorship for a pilot focused on new-hire ramp and objection-handling readiness.",
+      "openingLine": "Ramp is already expensive. Convince me this changes rep behavior, not just completion rates."
+    },
+    {
+      "key": "zero-trust-access-modernization",
+      "title": "Zero Trust Access Modernization",
+      "description": "Practice a cybersecurity platform conversation with a CISO who is skeptical of yet another identity modernization program.",
+      "buyerCompany": "IronGate Financial",
+      "buyerRole": "Chief Information Security Officer",
+      "buyerTone": "Risk-focused, blunt, and highly allergic to platform sprawl.",
+      "challenge": "Privileged access exceptions and vendor access drift are creating audit pressure, but prior identity programs overpromised and underdelivered.",
+      "goal": "Secure agreement on a joint discovery workshop with security and infrastructure leadership.",
+      "openingLine": "Every vendor says zero trust. Show me why this is not another expensive access project."
+    },
+    {
+      "key": "cloud-resilience-budget-pressure",
+      "title": "Cloud Resilience Budget Pressure",
+      "description": "Practice an infrastructure observability conversation with a VP of Infrastructure who must improve resilience while defending spend.",
+      "buyerCompany": "BlueCurrent Data",
+      "buyerRole": "VP of Infrastructure",
+      "buyerTone": "Operational, cost-sensitive, and impatient with generic monitoring claims.",
+      "challenge": "Cloud incidents are surfacing too late, but the buyer is under CFO pressure to rationalize tooling and avoid adding new dashboards.",
+      "goal": "Earn a follow-up session focused on incident-response workflow and cost-of-delay analysis.",
+      "openingLine": "If the answer is buy more tooling while I am cutting spend, we can end this here."
+    },
+    {
+      "key": "field-service-downtime-prevention",
+      "title": "Field Service Downtime Prevention",
+      "description": "Practice a conversation with a service-operations leader who thinks dispatch discipline, not enablement, is the root cause of repeated truck rolls.",
+      "buyerCompany": "Atlas Equipment Group",
+      "buyerRole": "VP of Service Operations",
+      "buyerTone": "Pragmatic, margin-conscious, and tired of transformation language.",
+      "challenge": "Technicians face the same customer objections repeatedly in the field, but coaching only happens after a failed visit or escalation.",
+      "goal": "Secure a regional pilot tying practice quality to first-time-fix discipline and escalation reduction.",
+      "openingLine": "Our problem is dispatch discipline, not training. Why should I believe this changes uptime?"
+    },
+    {
+      "key": "plant-automation-change-resistance",
+      "title": "Plant Automation Change Resistance",
+      "description": "Practice a manufacturing technology conversation with an operations director who has seen digital rollouts die on the shop floor.",
+      "buyerCompany": "ForgeLine Components",
+      "buyerRole": "Plant Operations Director",
+      "buyerTone": "Direct, skeptical, and focused on frontline credibility.",
+      "challenge": "Supervisors and technicians bypass new workflows under production pressure, causing scrap, rework, and uneven plant adoption.",
+      "goal": "Win agreement on a plant-level pilot focused on frontline manager reinforcement.",
+      "openingLine": "We do not need another digital rollout that dies on the floor after kickoff."
+    }
+  ],
+  "documents": [
+    {
+      "scenarioKey": "security-platform-rollout",
+      "title": "Security Cost Snapshot",
+      "type": "NOTE",
+      "summary": "Security teams lose budget to duplicated tooling and manual triage.",
+      "content": "The average customer in this segment runs more than twelve security tools, with overlapping alert streams and fragmented ownership. Consolidation is only credible when the seller ties savings to specific workflow reductions such as duplicate triage, licensing overlap, and analyst handoffs.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "security-platform-rollout",
+      "title": "Procurement Objection Guide",
+      "type": "NOTE",
+      "summary": "Procurement wants implementation risk and measurable outcomes addressed early.",
+      "content": "Procurement-led stakeholders respond when the commercial case is specific: timeline to value, implementation owners, measurable savings, and downside of doing nothing. Avoid broad transformation language unless you can quantify it.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "revenue-ops-forecasting",
+      "title": "Forecast Cadence Notes",
+      "type": "NOTE",
+      "summary": "Forecast misses are often operating cadence failures, not just data quality failures.",
+      "content": "When forecast calls are inconsistent, inspection criteria vary by manager and risk gets buried until late-stage deal reviews. Strong conversations connect forecast accuracy to inspection cadence, exit criteria, and manager coaching habits rather than blaming CRM hygiene alone.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "change-management-adoption",
+      "title": "Manager Adoption Risks",
+      "type": "NOTE",
+      "summary": "Adoption fails when managers do not see workflow relief or accountability.",
+      "content": "Enablement pilots succeed when managers are given one narrow workflow change, visible scorecards, and a short feedback loop. The buyer needs proof that coaching habits will be reinforced by operating rhythm, not just training content.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "forecast-confidence-coaching",
+      "title": "Forecast Quality Memo",
+      "type": "NOTE",
+      "summary": "Forecast misses often trace back to weak discovery and inconsistent deal qualification.",
+      "content": "Inspection rigor matters, but it only exposes risk that already entered the pipeline. Teams that want higher forecast confidence need reps to practice discovery, mutual action planning, and objection handling before live deals reach late stages.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "forecast-confidence-coaching",
+      "title": "Tool Fatigue Objection",
+      "type": "NOTE",
+      "summary": "RevOps buyers need proof that practice data complements existing systems instead of creating another silo.",
+      "content": "The strongest answer is not that Smart Training replaces CRM or call recording. It gives managers and RevOps a controlled practice signal before risky behavior hits production opportunities, which makes inspection data more actionable.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "frontline-coaching-consistency",
+      "title": "Manager Coaching Variance",
+      "type": "NOTE",
+      "summary": "Managers coach reactively and unevenly when practice is not embedded in workflow.",
+      "content": "In many sales teams, coaching quality depends on individual manager discipline. A Challenger pitch should reframe the problem from 'more coaching content' to 'a repeatable pre-call and post-call practice system that narrows variance across managers.'",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "frontline-coaching-consistency",
+      "title": "Pilot Scorecard Outline",
+      "type": "NOTE",
+      "summary": "Pilots should measure behavior change, not just usage.",
+      "content": "Use a pilot scorecard that tracks practice completion, manager feedback turnaround, objection-handling quality, and changes in stage progression on the participating teams. This helps a skeptical VP of Sales connect coaching workflow to execution quality.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "rep-ramp-time-compression",
+      "title": "Ramp Risk Note",
+      "type": "NOTE",
+      "summary": "Ramp slows when first high-stakes practice happens on live opportunities.",
+      "content": "Most onboarding plans teach product and process before reps face realistic objections. The hidden cost is that the first real practice happens with prospects, which extends time-to-confidence and forces managers to rescue live deals instead of shaping behavior earlier.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "rep-ramp-time-compression",
+      "title": "Objection Readiness Benchmark",
+      "type": "NOTE",
+      "summary": "Executives respond to readiness milestones tied to observable selling behavior.",
+      "content": "A strong pilot proposal ties Smart Training to specific readiness milestones: handling pricing pressure, reframing status quo bias, navigating multistakeholder objections, and earning a next-step commitment without manager intervention.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "zero-trust-access-modernization",
+      "title": "Identity Drift Risk Brief",
+      "type": "NOTE",
+      "summary": "Security leaders care about exception creep, third-party access, and audit exposure.",
+      "content": "The strongest conversations quantify the hidden cost of standing access, vendor access drift, and slow recertification cycles. Generic zero-trust language falls flat unless the seller ties the platform to risk reduction and fewer emergency exceptions.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "zero-trust-access-modernization",
+      "title": "CISO Objection Pattern",
+      "type": "NOTE",
+      "summary": "The buyer has seen too many identity projects framed as transformation without operational proof.",
+      "content": "A Challenger answer should shift the debate from architecture vision to avoidable audit friction, privileged access sprawl, and concrete control failures that keep consuming leadership time.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "cloud-resilience-budget-pressure",
+      "title": "Incident Cost Memo",
+      "type": "NOTE",
+      "summary": "Infrastructure leaders respond to cost-of-delay and workflow compression, not monitoring buzzwords.",
+      "content": "If incidents are detected late and triaged across fragmented tools, the business cost compounds through downtime, customer escalations, and engineer distraction. A strong seller reframes the issue from 'more visibility' to 'faster coordinated decisions under pressure.'",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "cloud-resilience-budget-pressure",
+      "title": "Tool Rationalization Pressure",
+      "type": "NOTE",
+      "summary": "Budget-sensitive buyers need a path that can simplify workflow instead of adding another surface area.",
+      "content": "The buyer will push back on dashboard sprawl. The seller should connect resilience gains to fewer handoffs, faster prioritization, and evidence that the tooling footprint can be rationalized over time.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "field-service-downtime-prevention",
+      "title": "Repeat Truck Roll Note",
+      "type": "NOTE",
+      "summary": "Field teams lose margin when technicians handle objections differently and escalate late.",
+      "content": "Service leaders often see the symptom as dispatch inefficiency, but repeated truck rolls also come from weak expectation-setting, inconsistent discovery on-site, and poor objection handling with customer stakeholders.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "field-service-downtime-prevention",
+      "title": "First-Time-Fix Coaching Angle",
+      "type": "NOTE",
+      "summary": "Training must be tied to operational outcomes, not generic frontline development.",
+      "content": "The seller should position practice as a way to improve first-time-fix discipline, escalation quality, and technician confidence before high-pressure site visits, rather than as a broad learning platform rollout.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "plant-automation-change-resistance",
+      "title": "Frontline Adoption Barrier",
+      "type": "NOTE",
+      "summary": "Plant initiatives fail when supervisors cannot reinforce new behavior under production pressure.",
+      "content": "Operations leaders do not trust top-down adoption claims. They want proof that frontline supervisors can coach the new motion in short bursts without slowing production.",
+      "sourceUrl": null
+    },
+    {
+      "scenarioKey": "plant-automation-change-resistance",
+      "title": "Scrap and Rework Reframe",
+      "type": "NOTE",
+      "summary": "The real problem is not software usage but operational inconsistency.",
+      "content": "A Challenger pitch should connect skipped workflows to scrap, rework, and delayed root-cause resolution. The point is not to sell digital change in the abstract but to expose the cost of uneven execution on the floor.",
+      "sourceUrl": null
+    }
+  ]
+}
