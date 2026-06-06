@@ -52,13 +52,21 @@
 - Upgraded the Vitest/Vite test toolchain and added targeted transitive overrides so both `pnpm audit` and `pnpm audit --prod` report no known vulnerabilities.
 - Confirmed `pnpm release:check` passes on the audited working tree with 48 Vitest tests and the Playwright launch-flow E2E test.
 
+## Progress Notes (2026-06-06)
+
+- Created launch-candidate branch `codex/launch-readiness-audit` from `main@66e67e9`.
+- Committed the full audited working tree with message `chore: prepare pilot launch candidate`.
+- Confirmed `pnpm release:check` passes from the clean committed revision with 48 Vitest tests and the Playwright launch-flow E2E test.
+- Confirmed full `pnpm audit` reports no known vulnerabilities.
+- Created annotated launch anchor tag `pilot-launch-2026-06-05` on the passing committed revision.
+
 ## Risks / Follow-ups
 
 - Retrieval backend choice is intentionally deferred for the text-first pilot; owner approval is still needed if that deferral is the launch posture.
 - Realtime audio remains experimental and out of the pilot gate unless the owner explicitly changes scope.
 - Pricing and usage scripts stay out of scope until post-MVP billing/reporting requirements are approved.
 - Hosted database bootstrap evidence has not been captured from a live database yet.
-- The audited working tree still needs to be committed or tagged before the launch record can claim final release-revision evidence.
+- The launch candidate is committed and tagged, but it has not been deployed and hosted evidence is still incomplete.
 
 ## Follow-up Queue (After The Pilot-Ready Line)
 
@@ -71,7 +79,7 @@ Use [FINAL_READINESS_REVIEW.md](FINAL_READINESS_REVIEW.md) as the final meeting 
 1. Capture the hosted evidence package in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md): live `GET /api/health`, `pnpm smoke:hosted`, hosted QA, and demo rehearsal results.
 2. Fill live deployment metadata and rollback anchors in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md): web URL, API URL, health URL, support contact, and known-good deploy ids.
 3. Verify the hosted pilot posture from the live environment: Postgres-backed health, `/privacy` support contact visibility, explicit backup/restore ownership, `OPENAI_TEXT_ENABLED=false`, and `VOICE_LAB_ENABLED=false`.
-4. Commit or tag the audited working tree and record `pnpm release:check` from that exact launch revision.
+4. If the deployed revision changes after `pilot-launch-2026-06-05`, rerun `pnpm release:check` and update the launch record before opening access.
 
 ### Pilot hardening
 

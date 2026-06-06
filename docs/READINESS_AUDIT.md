@@ -1,4 +1,4 @@
-# Readiness Audit (2026-06-05)
+# Readiness Audit (2026-06-06)
 
 ## Purpose
 
@@ -20,7 +20,7 @@ Each pillar is scored 0-5:
 | Pillar | Score | Evidence |
 | --- | ---: | --- |
 | Product completeness | 3.5/5 | Core text-first user journey works locally (auth, dashboard, session flow, coach pause, transcript history), while broader reporting/admin depth remains out of scope |
-| Technical readiness | 4/5 | Monorepo, file and postgres-backed flows, route handlers, seed tooling, production storage guards, and file-store atomic writes are in place; the repo-root `pnpm release:check` preflight passed on the audited working tree on 2026-06-05, including typecheck, lint, tests, build, Playwright E2E, and `pnpm audit --prod`; full `pnpm audit` also reported no known vulnerabilities; hosted migration and live deployment evidence still need completion |
+| Technical readiness | 4/5 | Monorepo, file and postgres-backed flows, route handlers, seed tooling, production storage guards, and file-store atomic writes are in place; the repo-root `pnpm release:check` preflight passed from committed launch revision tag `pilot-launch-2026-06-05` on 2026-06-06, including typecheck, lint, tests, build, Playwright E2E, and `pnpm audit --prod`; full `pnpm audit` also reported no known vulnerabilities; hosted migration and live deployment evidence still need completion |
 | Test readiness | 4.5/5 | `vitest` runs package, API, script, and web tests with roleplay flow coverage on file and postgres backends, invalid completed-session transition coverage, privacy/deletion coverage, seed result coverage, and file-store recovery coverage; Playwright E2E smoke is wired and passing |
 | Operational readiness | 2.5/5 | Security/privacy controls are documented as complete, but hosted launch evidence and rollout record fields are still open |
 
@@ -34,8 +34,8 @@ This is the current go/no-go summary for the first hosted pilot. Use it with [FI
 
 | Severity | Blocker | Owner | Evidence needed to close |
 | --- | --- | --- | --- |
-| P0 | Hosted release evidence is still incomplete for the launch revision. The local repo gate `pnpm release:check` passed on the audited working tree on 2026-06-05, but the working tree still needs to be committed or otherwise turned into the exact intended launch revision before the launch record can claim final revision evidence. The runbook still requires live `/api/health`, `pnpm smoke:hosted`, and hosted manual QA to pass before go. | Pilot operator / release owner | Commit the audited working tree or record the exact release tag, rerun `pnpm release:check` from that revision, record the final result in Section 4 of [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md), then fill the remaining hosted checks with pass/fail, runner, and timestamp; hosted QA marked pass from [HOSTED_QA_CHECKLIST.md](HOSTED_QA_CHECKLIST.md). |
-| P0 | Live deployment metadata and rollback anchors are incomplete. Launch control still has `TBD` values for revision, URLs, and known-good deploy ids, so rollback and verification are not yet operationally grounded. | Pilot operator / deployment owner | Complete Section 3 and the known-good deploy ids in Section 5 of [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md) with the actual hosted revision, web URL, API URL, health URL, and rollback targets. |
+| P0 | Hosted release evidence is still incomplete for the launch revision. The local repo gate `pnpm release:check` passed from committed launch revision tag `pilot-launch-2026-06-05` on 2026-06-06, but the runbook still requires live `/api/health`, `pnpm smoke:hosted`, and hosted manual QA to pass before go. | Pilot operator / release owner | Fill the remaining hosted checks with pass/fail, runner, and timestamp in Section 4 of [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md); hosted QA must be marked pass from [HOSTED_QA_CHECKLIST.md](HOSTED_QA_CHECKLIST.md). |
+| P0 | Live deployment metadata and rollback anchors are incomplete. Launch control still has `TBD` values for URLs and known-good deploy ids, so rollback and verification are not yet operationally grounded. | Pilot operator / deployment owner | Complete Section 3 and the known-good deploy ids in Section 5 of [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md) with the actual hosted web URL, API URL, health URL, and rollback targets. |
 | P0 | Pilot environment posture required by the runbook is not yet evidenced on the hosted system. Support contact visibility, Postgres-backed health posture, restart or crash visibility, service logs, database visibility, backup confirmation, and the disabled text or voice flags have not been recorded from the live environment. | Pilot operator / privacy and infrastructure owner | Evidence that `/privacy` shows the support contact, live `GET /api/health` reports `storageBackend=postgres`, `openAiTextEnabled=false`, and `voiceLabEnabled=false`, and every required row in Section 4A of [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md) is filled with launch-day monitoring evidence. |
 | P1 | Auth and tenant model decisions are implemented in practice but still lack explicit owner sign-off. External usage should not proceed while the intended access model is only implicit across code and docs. | Product owner / security owner | Update D-002 in `docs/DECISIONS_REQUIRED.md` with explicit selected posture and owner approval, then confirm the decision matches current org-scoped API behavior. |
 | P2 | Retrieval backend selection is still open, but current hosted pilot scope remains text-first and does not require retrieval to validate the main launch path. | Product owner / platform owner | Either record a deferral for the first pilot or choose the retrieval posture in `docs/DECISIONS_REQUIRED.md`. |
@@ -104,7 +104,7 @@ Use the follow-up queue in [AGENT_TASK_BOARD.md](AGENT_TASK_BOARD.md) as the pla
 
 ### Week 2: Hosted Validation and Evidence Capture
 
-- Run the repo release gate (`pnpm release:check`) from the intended launch revision and record it as `PASS` only if the repo-root command completes typecheck, lint, Vitest, build, Playwright E2E, and `pnpm audit --prod` with exit `0`.
+- Keep `pilot-launch-2026-06-05` as the local launch-candidate anchor unless a later committed revision is intentionally selected and the repo release gate is rerun.
 - Execute hosted smoke and hosted manual QA and record outcomes.
 - Fill launch-control artifacts with owners, timestamps, and rollback targets.
 
@@ -128,8 +128,8 @@ All must pass:
 
 ## Immediate Next Build Tasks (Implementation Backlog)
 
-1. Commit or tag the audited working tree as the intended launch revision, rerun `pnpm release:check`, and record that final revision evidence in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).
-2. Resolve remaining decision-register items with explicit owner sign-off (`docs/DECISIONS_REQUIRED.md`).
-3. Run hosted validation (`pnpm smoke:hosted` + hosted manual QA) and fill all `TBD` launch evidence fields.
+1. Resolve remaining decision-register items with explicit owner sign-off (`docs/DECISIONS_REQUIRED.md`).
+2. Deploy the tagged launch candidate, then fill live URLs, deploy ids, rollback anchors, support contact, and pre-pilot export details in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).
+3. Run hosted validation (`pnpm smoke:hosted` + hosted manual QA) and fill all hosted `TBD` launch evidence fields.
 4. Publish blocker-severity list and final readiness update for pilot go/no-go.
 5. Keep retrieval/usage scripts deferred until post-MVP billing/retrieval work is intentionally scheduled.
