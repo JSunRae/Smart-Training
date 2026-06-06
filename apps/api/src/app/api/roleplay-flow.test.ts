@@ -22,7 +22,7 @@ import { POST as complete } from "./sessions/[sessionId]/complete/route";
 import { POST as message } from "./sessions/[sessionId]/message/route";
 import { GET as listSessions } from "./sessions/route";
 import { POST as start } from "./sessions/start/route";
-import { readDatabase } from "@/lib/store";
+import { readDatabase, resetDatabase } from "@/lib/store";
 
 let tempDirectory = "";
 let storeFileName = "";
@@ -40,6 +40,9 @@ describe("roleplay API flow", () => {
     delete process.env.SMART_TRAINING_DB_PATH;
     delete process.env.APP_SESSION_SECRET;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.SESSION_RETENTION_DAYS;
+    (globalThis as typeof globalThis & { __smartTrainingRateLimits?: Map<string, unknown> })
+      .__smartTrainingRateLimits?.clear();
 
     if (tempDirectory) {
       await rm(tempDirectory, { force: true, recursive: true });
@@ -162,6 +165,68 @@ describe("roleplay API flow", () => {
     ]);
   });
 
+  it("rejects message and coach turns after a session is completed", async () => {
+    const registered = await registerUser({
+      email: "closed-session@example.com",
+      name: "Robin Vale",
+      organizationName: "State Guard Org"
+    });
+
+    const dashboardResponse = await dashboard(createRequest("/api/dashboard", "GET", undefined, registered.cookie));
+    const dashboardBody = await readJson<DashboardResponse>(dashboardResponse);
+    const scenarioId = dashboardBody.scenarios[0]?.id;
+
+    expect(scenarioId).toBeTruthy();
+
+    const started = await readJson<SessionResponse>(
+      await start(createRequest("/api/sessions/start", "POST", { scenarioId }, registered.cookie))
+    );
+
+    const completeResponse = await complete(
+      createRequest(`/api/sessions/${started.session.id}/complete`, "POST", undefined, registered.cookie),
+      sessionContext(started.session.id)
+    );
+    expect(completeResponse.status).toBe(200);
+
+    const completed = await readJson<SessionResponse>(completeResponse);
+    expect(completed.session.status).toBe("COMPLETED");
+    expect(completed.session.messageCount).toBe(1);
+    expect(completed.session.coachInterventionCount).toBe(0);
+    expect(completed.session.endedAt).toBeTruthy();
+
+    const messageResponse = await message(
+      createRequest(
+        `/api/sessions/${started.session.id}/message`,
+        "POST",
+        { content: "Following up after completion." },
+        registered.cookie
+      ),
+      sessionContext(started.session.id)
+    );
+    expect(messageResponse.status).toBe(409);
+    await expect(messageResponse.json()).resolves.toEqual({ error: "Session is no longer active." });
+
+    const coachResponse = await coach(
+      createRequest(`/api/sessions/${started.session.id}/coach`, "POST", undefined, registered.cookie),
+      sessionContext(started.session.id)
+    );
+    expect(coachResponse.status).toBe(409);
+    await expect(coachResponse.json()).resolves.toEqual({ error: "Session is no longer active." });
+
+    const detailResponse = await getSession(
+      createRequest(`/api/sessions/${started.session.id}`, "GET", undefined, registered.cookie),
+      sessionContext(started.session.id)
+    );
+    expect(detailResponse.status).toBe(200);
+
+    const detail = await readJson<SessionResponse>(detailResponse);
+    expect(detail.session.status).toBe("COMPLETED");
+    expect(detail.session.endedAt).toBe(completed.session.endedAt);
+    expect(detail.session.messageCount).toBe(completed.session.messageCount);
+    expect(detail.session.coachInterventionCount).toBe(completed.session.coachInterventionCount);
+    expect(detail.session.messages.map((entry) => entry.role)).toEqual(["ASSISTANT"]);
+  });
+
   it("blocks session access across organizations", async () => {
     const firstUser = await registerUser({
       email: "owner@example.com",
@@ -195,6 +260,94 @@ describe("roleplay API flow", () => {
     await expect(unauthorized.json()).resolves.toEqual({ error: "Session not found." });
   });
 
+  it("prunes expired sessions and transcript history on session reads", async () => {
+    process.env.SESSION_RETENTION_DAYS = "30";
+    const now = Date.now();
+    const expiredStartedAt = new Date(now - 61 * 24 * 60 * 60 * 1000).toISOString();
+    const expiredEndedAt = new Date(now - 60 * 24 * 60 * 60 * 1000).toISOString();
+    const retainedStartedAt = new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const retainedEndedAt = new Date(now - 10 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString();
+
+    const registered = await registerUser({
+      email: "retention@example.com",
+      name: "Casey Holt",
+      organizationName: "Retention Test Org"
+    });
+
+    const dashboardResponse = await dashboard(
+      createRequest("/api/dashboard", "GET", undefined, registered.cookie)
+    );
+    const dashboardBody = await readJson<DashboardResponse>(dashboardResponse);
+    const scenarioId = dashboardBody.scenarios[0]?.id;
+
+    expect(scenarioId).toBeTruthy();
+
+    const database = await readDatabase();
+    database.sessions.push(
+      {
+        id: "expired-session",
+        status: "COMPLETED",
+        startedAt: expiredStartedAt,
+        endedAt: expiredEndedAt,
+        coachInterventionCount: 0,
+        createdAt: expiredStartedAt,
+        updatedAt: expiredEndedAt,
+        userId: registered.body.user.id,
+        scenarioId: scenarioId!,
+        organizationId: registered.body.user.organization.id
+      },
+      {
+        id: "retained-session",
+        status: "COMPLETED",
+        startedAt: retainedStartedAt,
+        endedAt: retainedEndedAt,
+        coachInterventionCount: 1,
+        createdAt: retainedStartedAt,
+        updatedAt: retainedEndedAt,
+        userId: registered.body.user.id,
+        scenarioId: scenarioId!,
+        organizationId: registered.body.user.organization.id
+      }
+    );
+    database.messages.push(
+      {
+        id: "expired-message",
+        role: "ASSISTANT",
+        content: "Expired transcript history",
+        createdAt: expiredEndedAt,
+        updatedAt: expiredEndedAt,
+        sessionId: "expired-session"
+      },
+      {
+        id: "retained-message",
+        role: "ASSISTANT",
+        content: "Retained transcript history",
+        createdAt: retainedEndedAt,
+        updatedAt: retainedEndedAt,
+        sessionId: "retained-session"
+      }
+    );
+    await resetDatabase(database);
+
+    const sessionsResponse = await listSessions(
+      createRequest("/api/sessions", "GET", undefined, registered.cookie)
+    );
+    expect(sessionsResponse.status).toBe(200);
+
+    const sessions = await readJson<SessionsResponse>(sessionsResponse);
+    expect(sessions.sessions.map((session) => session.id)).toEqual(["retained-session"]);
+
+    const retainedDatabase = await readDatabase();
+    expect(retainedDatabase.sessions.some((session) => session.id === "expired-session")).toBe(false);
+    expect(
+      retainedDatabase.messages.some((message) => message.sessionId === "expired-session")
+    ).toBe(false);
+    expect(retainedDatabase.sessions.some((session) => session.id === "retained-session")).toBe(true);
+    expect(
+      retainedDatabase.messages.some((message) => message.sessionId === "retained-session")
+    ).toBe(true);
+  });
+
   it("deletes an account and removes its transcript history", async () => {
     const registered = await registerUser({
       email: "cleanup@example.com",
@@ -214,10 +367,57 @@ describe("roleplay API flow", () => {
       )
     );
 
+    const databaseBeforeDelete = await readDatabase();
+    databaseBeforeDelete.scenarios.push({
+      id: "org-scenario-1",
+      key: "org-scenario-1",
+      title: "Org Scenario",
+      description: "Org-only practice prompt",
+      isActive: true,
+      buyerCompany: "Delete Test Buyer",
+      buyerRole: "Director",
+      buyerTone: "Direct",
+      challenge: "Validate cleanup",
+      goal: "Confirm org-owned content is deleted",
+      openingLine: "Walk me through your rollout plan.",
+      createdAt: "2026-05-29T00:00:00.000Z",
+      updatedAt: "2026-05-29T00:00:00.000Z",
+      organizationId: registered.body.user.organization.id
+    });
+    databaseBeforeDelete.documents.push(
+      {
+        id: "org-document-1",
+        title: "Org Document",
+        type: "NOTE",
+        content: "Owned by the deleted organization.",
+        summary: null,
+        sourceUrl: null,
+        createdAt: "2026-05-29T00:00:00.000Z",
+        updatedAt: "2026-05-29T00:00:00.000Z",
+        organizationId: registered.body.user.organization.id,
+        scenarioId: "org-scenario-1"
+      },
+      {
+        id: "shared-document-1",
+        title: "Shared Document",
+        type: "NOTE",
+        content: "Should keep the document but clear the deleted scenario reference.",
+        summary: null,
+        sourceUrl: null,
+        createdAt: "2026-05-29T00:00:00.000Z",
+        updatedAt: "2026-05-29T00:00:00.000Z",
+        organizationId: null,
+        scenarioId: "org-scenario-1"
+      }
+    );
+    await resetDatabase(databaseBeforeDelete);
+
     const deletionResponse = await deleteAccount(
       createRequest("/api/auth/account", "DELETE", undefined, registered.cookie)
     );
     expect(deletionResponse.status).toBe(200);
+    expect(deletionResponse.headers.get("set-cookie")).toContain("smart_training_session=");
+    expect(deletionResponse.headers.get("set-cookie")).toContain("Max-Age=0");
 
     const dashboardAfterDelete = await dashboard(
       createRequest("/api/dashboard", "GET", undefined, registered.cookie)
@@ -226,9 +426,17 @@ describe("roleplay API flow", () => {
 
     const database = await readDatabase();
     expect(database.users.some((user) => user.email === "cleanup@example.com")).toBe(false);
+    expect(
+      database.organizations.some((organization) => organization.id === registered.body.user.organization.id)
+    ).toBe(false);
     expect(database.sessions.some((session) => session.id === started.session.id)).toBe(false);
     expect(database.messages.some((message) => message.sessionId === started.session.id)).toBe(
       false
+    );
+    expect(database.scenarios.some((scenario) => scenario.id === "org-scenario-1")).toBe(false);
+    expect(database.documents.some((document) => document.id === "org-document-1")).toBe(false);
+    expect(database.documents.find((document) => document.id === "shared-document-1")?.scenarioId).toBe(
+      null
     );
   });
 });

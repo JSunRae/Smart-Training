@@ -1,52 +1,65 @@
 # Testing Kickoff Checklist
 
-Last updated: 2026-05-16
-Owner mode: route-level integration tests + browser E2E automation
+Last updated: 2026-06-05
+Owner mode: API integration + manual UI validation
 
 ## 1) Baseline Environment
 
 - [x] Install dependencies from workspace root: `pnpm install`
 - [x] Confirm node engine compatibility (`>=22.18.0 <23`)
-- [x] Configure optional OpenAI env vars (`OPENAI_API_KEY`, optional `OPENAI_API_BASE_URL`)
-- [x] Seed the active backend with `pnpm seed`
+- [ ] Configure required env vars (`DATABASE_URL`, `OPENAI_API_KEY`, optional `OPENAI_API_BASE_URL`)
+- [x] Verify API tooling and route tests execute from workspace root (`pnpm test`)
 
-## 2) Quality Gate
+## 2) Database Setup
 
-- [x] `pnpm typecheck` passes
+- [ ] Apply local schema bootstrap from `apps/api`: `pnpm --filter api db:bootstrap`
+- [x] Deterministic seed command is implemented: `pnpm seed`
+- [ ] Verify seeded org/user/scenario records exist
+
+`pnpm --filter api db:migrate` remains available as a compatibility alias, but it runs the same bootstrap script and does not apply versioned Prisma migrations.
+
+## 3) Baseline Quality Gate
+
 - [x] `pnpm lint` passes
 - [x] `pnpm test` passes
-- [x] `pnpm build` passes
-- [x] `pnpm test:e2e` passes
-- [x] `pnpm audit --prod` passes
+- [x] Record baseline outputs in sprint notes
 
-## 3) API Integration Coverage
+## 4) API Integration Testing (To Implement)
+
+Mandatory suites:
 
 - [x] `GET /api/health` returns 200 + status payload
-- [x] Register, logout, and login flow works
-- [x] `POST /api/sessions/start` creates a session
-- [x] `POST /api/sessions/:id/message` persists user and buyer turns
-- [x] `POST /api/sessions/:id/coach` returns coach guidance
-- [x] `POST /api/sessions/:id/complete` closes the session
-- [x] Cross-org session access is denied
-- [x] The Postgres backend passes the same auth and session lifecycle checks
-- [x] `POST /api/realtime/call` returns a guarded 503 when voice credentials are absent
+- [x] `POST /api/session/start` creates session with user + scenario
+- [x] `POST /api/session/:id/message` persists user message and returns buyer message
+- [x] `POST /api/session/:id/coach` returns coach intervention payload
+- [x] `POST /api/session/:id/complete` closes session and persists final state
 
-Reference: `apps/api/src/app/api/roleplay-flow.test.ts`
+Error-path suites:
 
-## 4) Manual UI Validation
+- [x] Invalid scenario/user handling
+- [x] Unauthorized session access across org boundaries
+- [x] Invalid session state transitions
 
-- [x] Account creation succeeds and lands on the dashboard
+## 5) Manual UI Validation (Near-Full Flow)
+
+- [x] Login succeeds and user lands on dashboard
 - [x] Scenario can be selected and session started
-- [x] Buyer response appears after a seller turn
-- [x] Pause-for-coach returns guidance
-- [x] Session completion persists the transcript
-- [x] Saved history can be reopened from the dashboard
+- [x] Buyer response appears after user turn
+- [x] Pause-for-coach returns guidance and resumes flow
+- [x] Session completion persists transcript/history
+- [x] Existing session history can be viewed
 
-Reference: `docs/QA_MANUAL_CHECKLIST.md`
+## 6) Readiness Review Output
 
-## 5) Remaining Launch Tasks
+Before calling the product "testable", publish:
 
-- [ ] Sync the included `render.yaml` Blueprint or translate it to the chosen host
-- [ ] Configure the public support contact shown on `/privacy`
-- [ ] Run `pnpm smoke:hosted` against the deployed API and hosted web origin
-- [ ] Run the hosted manual QA pass in `docs/HOSTED_QA_CHECKLIST.md`
+- [x] API integration test results (pass/fail)
+- [x] Manual UI checklist results (pass/fail + defects)
+- [x] Open blocker list by severity (P0/P1/P2) in [READINESS_AUDIT.md](READINESS_AUDIT.md)
+- [x] Updated readiness score in `docs/READINESS_AUDIT.md`
+
+Use the blocker severities in [READINESS_AUDIT.md](READINESS_AUDIT.md) as the launch-facing interpretation of this checklist:
+
+- P0 means hosted pilot launch stays no-go until launch evidence is captured.
+- P1 means close before external usage even if internal verification can continue.
+- P2 means acceptable follow-up after pilot launch.

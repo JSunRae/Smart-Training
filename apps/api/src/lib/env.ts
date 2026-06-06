@@ -5,6 +5,10 @@ export function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
+export function isFileStoreProductionOverrideEnabled(): boolean {
+  return isFlagEnabled("ALLOW_FILE_STORAGE_IN_PRODUCTION");
+}
+
 export function hasOpenAiApiKey(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }

@@ -1,8 +1,10 @@
 # Showcase Runbook
 
-Last updated: 2026-05-15
+Last updated: 2026-05-29
 
 Use this runbook when you want a repeatable demo without improvising the whole conversation.
+
+This is the presentation-first scenario library. It is distinct from [HOSTED_DEMO_FLOW.md](HOSTED_DEMO_FLOW.md), which is the hosted rehearsal used to prove the live pilot can support the default stakeholder story. Use this showcase runbook for message control and scenario selection; use the hosted demo flow when the live environment itself needs to be validated.
 
 ## Scenario 1: Frontline Coaching Consistency
 

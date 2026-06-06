@@ -1,23 +1,53 @@
-const cli = parseArgs(process.argv.slice(2));
-const apiOrigin = cli.api || readRequiredEnv("SMART_TRAINING_API_ORIGIN");
-const webOrigin = cli.web || readOptionalEnv("SMART_TRAINING_WEB_ORIGIN");
-const expectedStorageBackend =
-  cli.expectStorageBackend ||
-  process.env.SMART_TRAINING_EXPECT_STORAGE_BACKEND?.trim() ||
-  "postgres";
-const expectedOpenAiTextEnabled = readBooleanExpectation(
-  "SMART_TRAINING_EXPECT_OPENAI_TEXT_ENABLED",
-  false,
-  cli.expectOpenAiTextEnabled
-);
-const expectedVoiceLabEnabled = readBooleanExpectation(
-  "SMART_TRAINING_EXPECT_VOICE_LAB_ENABLED",
-  false,
-  cli.expectVoiceLabEnabled
-);
-const expectedSupportEmail =
-  cli.supportEmail || readOptionalEnv("SMART_TRAINING_EXPECT_SUPPORT_EMAIL");
-const expectedSupportUrl = cli.supportUrl || readOptionalEnv("SMART_TRAINING_EXPECT_SUPPORT_URL");
+import { pathToFileURL } from "node:url";
+
+const USAGE = `Hosted smoke path for a live pilot deployment.
+
+Usage:
+  pnpm smoke:hosted -- --api <API_ORIGIN> [options]
+
+Required:
+  --api <origin>                         Hosted API origin.
+                                         Falls back to SMART_TRAINING_API_ORIGIN.
+
+Optional:
+  --web <origin>                         Hosted web origin.
+                                         Falls back to SMART_TRAINING_WEB_ORIGIN.
+  --support-email <email>                Expected support email on /privacy.
+                                         Falls back to SMART_TRAINING_EXPECT_SUPPORT_EMAIL.
+  --support-url <url>                    Expected support portal URL on /privacy.
+                                         Falls back to SMART_TRAINING_EXPECT_SUPPORT_URL.
+  --expect-storage-backend <value>       Expected /api/health storageBackend.
+                                         Defaults to SMART_TRAINING_EXPECT_STORAGE_BACKEND or postgres.
+  --expect-openai-text-enabled <bool>    Expected /api/health openAiTextEnabled.
+                                         Defaults to SMART_TRAINING_EXPECT_OPENAI_TEXT_ENABLED or false.
+  --expect-voice-lab-enabled <bool>      Expected /api/health voiceLabEnabled.
+                                         Defaults to SMART_TRAINING_EXPECT_VOICE_LAB_ENABLED or false.
+  --help, -h                             Show this help.
+
+What this verifies:
+  - /api/health returns the expected launch posture
+  - optional hosted /privacy page exposes retention and support-contact posture
+  - register -> dashboard -> session start -> seller turn -> coach -> complete flow works
+  - completed session appears on dashboard
+  - account deletion invalidates auth
+
+Examples:
+  pnpm smoke:hosted -- --api https://api.example.com
+  pnpm smoke:hosted -- --api https://api.example.com --web https://app.example.com --support-email pilot-support@example.com
+  $env:SMART_TRAINING_API_ORIGIN = "https://api.example.com"
+  pnpm smoke:hosted
+`;
+
+class UsageError extends Error {}
+
+let currentStep = "initialize";
+let apiOrigin = "";
+let webOrigin = "";
+let expectedStorageBackend = "postgres";
+let expectedOpenAiTextEnabled = false;
+let expectedVoiceLabEnabled = false;
+let expectedSupportEmail = "";
+let expectedSupportUrl = "";
 
 const state = {
   cookie: "",
@@ -27,7 +57,26 @@ const state = {
 
 const email = `smoke-${Date.now()}@example.com`;
 
-try {
+export async function runHostedSmoke(argv = process.argv.slice(2), env = process.env) {
+  const config = resolveSmokeConfig(argv, env);
+  if (config.help) {
+    writeUsage();
+    return 0;
+  }
+
+  apiOrigin = config.apiOrigin;
+  webOrigin = config.webOrigin;
+  expectedStorageBackend = config.expectedStorageBackend;
+  expectedOpenAiTextEnabled = config.expectedOpenAiTextEnabled;
+  expectedVoiceLabEnabled = config.expectedVoiceLabEnabled;
+  expectedSupportEmail = config.expectedSupportEmail;
+  expectedSupportUrl = config.expectedSupportUrl;
+
+  currentStep = "initialize";
+  state.cookie = "";
+  state.sessionId = "";
+  state.scenarioId = "";
+
   await verifyHealth();
   await verifyPublicLaunchPosture();
   await registerAccount();
@@ -40,42 +89,19 @@ try {
   await deleteAccount();
   await verifyLoggedOut();
   writeSuccess("Hosted smoke test passed.");
-} catch (error) {
-  console.error("");
-  console.error("Hosted smoke test failed.");
-  if (error instanceof Error) {
-    console.error(error.message);
-  } else {
-    console.error(String(error));
-  }
-  process.exitCode = 1;
+  return 0;
 }
 
 async function verifyHealth() {
+  currentStep = "health";
   const response = await request("/api/health", { method: "GET" }, false);
   const body = await readJson(response);
 
-  if (body.status !== "ok") {
-    throw new Error(`Health check did not return status ok: ${JSON.stringify(body)}`);
-  }
-
-  if (expectedStorageBackend && body.storageBackend !== expectedStorageBackend) {
-    throw new Error(
-      `Expected storage backend ${expectedStorageBackend} but received ${body.storageBackend}.`
-    );
-  }
-
-  if (body.openAiTextEnabled !== expectedOpenAiTextEnabled) {
-    throw new Error(
-      `Expected openAiTextEnabled=${expectedOpenAiTextEnabled} but received ${body.openAiTextEnabled}.`
-    );
-  }
-
-  if (body.voiceLabEnabled !== expectedVoiceLabEnabled) {
-    throw new Error(
-      `Expected voiceLabEnabled=${expectedVoiceLabEnabled} but received ${body.voiceLabEnabled}.`
-    );
-  }
+  validateHealthBody(body, {
+    expectedOpenAiTextEnabled,
+    expectedStorageBackend,
+    expectedVoiceLabEnabled
+  });
 
   writeStep(
     `Health ok (${body.storageBackend}, openAiTextEnabled=${body.openAiTextEnabled}, voiceLabEnabled=${body.voiceLabEnabled})`
@@ -83,7 +109,9 @@ async function verifyHealth() {
 }
 
 async function verifyPublicLaunchPosture() {
+  currentStep = "privacy";
   if (!webOrigin) {
+    writeStep("Hosted privacy page skipped (no web origin configured)");
     return;
   }
 
@@ -97,40 +125,13 @@ async function verifyPublicLaunchPosture() {
   }
 
   const privacyHtml = await privacyResponse.text();
-  if (!privacyHtml.includes("30-day retention")) {
-    throw new Error("Hosted /privacy page did not expose the expected retention language.");
-  }
-
-  if (
-    privacyHtml.includes("This deployment has not configured a public support contact yet.")
-  ) {
-    throw new Error("Hosted /privacy page is still missing an operator-facing support contact.");
-  }
-
-  if (expectedSupportEmail && !privacyHtml.includes(expectedSupportEmail)) {
-    throw new Error(
-      `Hosted /privacy page did not include the expected support email ${expectedSupportEmail}.`
-    );
-  }
-
-  if (expectedSupportUrl && !privacyHtml.includes(expectedSupportUrl)) {
-    throw new Error(
-      `Hosted /privacy page did not include the expected support URL ${expectedSupportUrl}.`
-    );
-  }
-
-  if (!expectedSupportEmail && !expectedSupportUrl) {
-    const exposesSupportLink =
-      privacyHtml.includes("mailto:") || privacyHtml.includes("Support portal:");
-    if (!exposesSupportLink) {
-      throw new Error("Hosted /privacy page did not expose a support email or support portal.");
-    }
-  }
+  validatePrivacyHtml(privacyHtml, { expectedSupportEmail, expectedSupportUrl });
 
   writeStep("Hosted privacy page ok");
 }
 
 async function registerAccount() {
+  currentStep = "register";
   const response = await request(
     "/api/auth/register",
     {
@@ -155,6 +156,7 @@ async function registerAccount() {
 }
 
 async function verifyDashboard(mode) {
+  currentStep = `dashboard:${mode}`;
   const response = await request("/api/dashboard", { method: "GET" });
   const body = await readJson(response);
 
@@ -182,6 +184,7 @@ async function verifyDashboard(mode) {
 }
 
 async function startSession() {
+  currentStep = "session:start";
   const response = await request("/api/sessions/start", {
     method: "POST",
     body: JSON.stringify({ scenarioId: state.scenarioId })
@@ -197,6 +200,7 @@ async function startSession() {
 }
 
 async function sendSellerTurn() {
+  currentStep = "session:seller-turn";
   const response = await request(`/api/sessions/${state.sessionId}/message`, {
     method: "POST",
     body: JSON.stringify({
@@ -214,6 +218,7 @@ async function sendSellerTurn() {
 }
 
 async function requestCoach() {
+  currentStep = "session:coach";
   const response = await request(`/api/sessions/${state.sessionId}/coach`, {
     method: "POST"
   });
@@ -227,6 +232,7 @@ async function requestCoach() {
 }
 
 async function completeSession() {
+  currentStep = "session:complete";
   const response = await request(`/api/sessions/${state.sessionId}/complete`, {
     method: "POST"
   });
@@ -240,12 +246,14 @@ async function completeSession() {
 }
 
 async function deleteAccount() {
+  currentStep = "account:delete";
   await request("/api/auth/account", { method: "DELETE" });
   state.cookie = "";
   writeStep("Account deletion ok");
 }
 
 async function verifyLoggedOut() {
+  currentStep = "auth:post-delete";
   const response = await fetch(`${apiOrigin}/api/dashboard`, {
     headers: {
       Accept: "application/json"
@@ -275,6 +283,26 @@ async function request(pathname, init, requireSession = true) {
     headers
   });
 
+  await assertOkJsonResponse(response, pathname);
+  return response;
+}
+
+export async function readJson(response) {
+  const raw = await response.text();
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error(
+      `Expected JSON response but received ${response.headers.get("content-type") || "unknown content type"}: ${truncate(raw)}`
+    );
+  }
+}
+
+export async function assertOkJsonResponse(response, pathname) {
   if (!response.ok) {
     const body = await readJson(response);
     throw new Error(`${pathname} failed with ${response.status}: ${JSON.stringify(body)}`);
@@ -283,26 +311,21 @@ async function request(pathname, init, requireSession = true) {
   return response;
 }
 
-async function readJson(response) {
-  const raw = await response.text();
-  return raw ? JSON.parse(raw) : null;
-}
-
-function readRequiredEnv(name) {
-  const value = process.env[name]?.trim();
+function readRequiredEnv(name, env = process.env) {
+  const value = env[name]?.trim();
   if (!value) {
-    throw new Error(`Missing required environment variable ${name}.`);
+    throw new UsageError(`Missing required environment variable ${name}.`);
   }
 
   return value;
 }
 
-function readOptionalEnv(name) {
-  return process.env[name]?.trim() || "";
+function readOptionalEnv(name, env = process.env) {
+  return env[name]?.trim() || "";
 }
 
-function readBooleanExpectation(name, defaultValue, override = "") {
-  const raw = (override || process.env[name] || "").trim().toLowerCase();
+export function readBooleanExpectation(name, defaultValue, override = "", env = process.env) {
+  const raw = (override || env[name] || "").trim().toLowerCase();
   if (!raw) {
     return defaultValue;
   }
@@ -315,68 +338,179 @@ function readBooleanExpectation(name, defaultValue, override = "") {
     return false;
   }
 
-  throw new Error(`Invalid boolean value for ${name}: ${raw}`);
+  throw new UsageError(
+    `Invalid boolean value for ${name}: ${raw}. Use true/false, yes/no, on/off, or 1/0.`
+  );
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const parsed = {
     api: "",
     expectOpenAiTextEnabled: "",
     expectStorageBackend: "",
     expectVoiceLabEnabled: "",
+    help: false,
     supportEmail: "",
     supportUrl: "",
     web: ""
   };
 
+  const valueFlags = new Map([
+    ["--api", "api"],
+    ["--web", "web"],
+    ["--support-email", "supportEmail"],
+    ["--support-url", "supportUrl"],
+    ["--expect-storage-backend", "expectStorageBackend"],
+    ["--expect-openai-text-enabled", "expectOpenAiTextEnabled"],
+    ["--expect-voice-lab-enabled", "expectVoiceLabEnabled"]
+  ]);
+
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     const next = argv[index + 1] || "";
 
-    if (token === "--api") {
-      parsed.api = next;
+    if (token === "--help" || token === "-h") {
+      parsed.help = true;
+      continue;
+    }
+
+    if (valueFlags.has(token)) {
+      if (!next || next.startsWith("--")) {
+        throw new UsageError(`Flag ${token} requires a value.`);
+      }
+
+      parsed[valueFlags.get(token)] = next;
       index += 1;
       continue;
     }
 
-    if (token === "--web") {
-      parsed.web = next;
-      index += 1;
-      continue;
-    }
-
-    if (token === "--support-email") {
-      parsed.supportEmail = next;
-      index += 1;
-      continue;
-    }
-
-    if (token === "--support-url") {
-      parsed.supportUrl = next;
-      index += 1;
-      continue;
-    }
-
-    if (token === "--expect-storage-backend") {
-      parsed.expectStorageBackend = next;
-      index += 1;
-      continue;
-    }
-
-    if (token === "--expect-openai-text-enabled") {
-      parsed.expectOpenAiTextEnabled = next;
-      index += 1;
-      continue;
-    }
-
-    if (token === "--expect-voice-lab-enabled") {
-      parsed.expectVoiceLabEnabled = next;
-      index += 1;
-      continue;
-    }
+    throw new UsageError(`Unknown argument: ${token}`);
   }
 
   return parsed;
+}
+
+export function resolveSmokeConfig(argv, env = process.env) {
+  const cli = parseArgs(argv);
+  if (cli.help) {
+    return { help: true };
+  }
+
+  return {
+    apiOrigin: normalizeOrigin(
+      cli.api || readRequiredEnv("SMART_TRAINING_API_ORIGIN", env),
+      "--api / SMART_TRAINING_API_ORIGIN"
+    ),
+    expectedOpenAiTextEnabled: readBooleanExpectation(
+      "SMART_TRAINING_EXPECT_OPENAI_TEXT_ENABLED",
+      false,
+      cli.expectOpenAiTextEnabled,
+      env
+    ),
+    expectedStorageBackend:
+      cli.expectStorageBackend || env.SMART_TRAINING_EXPECT_STORAGE_BACKEND?.trim() || "postgres",
+    expectedSupportEmail:
+      cli.supportEmail || readOptionalEnv("SMART_TRAINING_EXPECT_SUPPORT_EMAIL", env),
+    expectedSupportUrl:
+      cli.supportUrl || readOptionalEnv("SMART_TRAINING_EXPECT_SUPPORT_URL", env),
+    expectedVoiceLabEnabled: readBooleanExpectation(
+      "SMART_TRAINING_EXPECT_VOICE_LAB_ENABLED",
+      false,
+      cli.expectVoiceLabEnabled,
+      env
+    ),
+    help: false,
+    webOrigin: normalizeOptionalOrigin(
+      cli.web || readOptionalEnv("SMART_TRAINING_WEB_ORIGIN", env),
+      "--web / SMART_TRAINING_WEB_ORIGIN"
+    )
+  };
+}
+
+export function normalizeOrigin(value, sourceLabel) {
+  try {
+    const url = new URL(value);
+    return url.origin;
+  } catch {
+    throw new UsageError(`${sourceLabel} must be an absolute URL. Received: ${value}`);
+  }
+}
+
+export function normalizeOptionalOrigin(value, sourceLabel) {
+  if (!value) {
+    return "";
+  }
+
+  return normalizeOrigin(value, sourceLabel);
+}
+
+export function validateHealthBody(body, expectations) {
+  if (!body || body.status !== "ok") {
+    throw new Error(`Health check did not return status ok: ${JSON.stringify(body)}`);
+  }
+
+  if (
+    expectations.expectedStorageBackend &&
+    body.storageBackend !== expectations.expectedStorageBackend
+  ) {
+    throw new Error(
+      `Expected storage backend ${expectations.expectedStorageBackend} but received ${body.storageBackend}.`
+    );
+  }
+
+  if (body.openAiTextEnabled !== expectations.expectedOpenAiTextEnabled) {
+    throw new Error(
+      `Expected openAiTextEnabled=${expectations.expectedOpenAiTextEnabled} but received ${body.openAiTextEnabled}.`
+    );
+  }
+
+  if (body.voiceLabEnabled !== expectations.expectedVoiceLabEnabled) {
+    throw new Error(
+      `Expected voiceLabEnabled=${expectations.expectedVoiceLabEnabled} but received ${body.voiceLabEnabled}.`
+    );
+  }
+}
+
+export function validatePrivacyHtml(
+  privacyHtml,
+  { expectedSupportEmail = "", expectedSupportUrl = "" } = {}
+) {
+  if (!privacyHtml.includes("30-day retention")) {
+    throw new Error("Hosted /privacy page did not expose the expected retention language.");
+  }
+
+  if (privacyHtml.includes("This deployment has not configured a public support contact yet.")) {
+    throw new Error("Hosted /privacy page is still missing an operator-facing support contact.");
+  }
+
+  if (expectedSupportEmail && !privacyHtml.includes(expectedSupportEmail)) {
+    throw new Error(
+      `Hosted /privacy page did not include the expected support email ${expectedSupportEmail}.`
+    );
+  }
+
+  if (expectedSupportUrl && !privacyHtml.includes(expectedSupportUrl)) {
+    throw new Error(
+      `Hosted /privacy page did not include the expected support URL ${expectedSupportUrl}.`
+    );
+  }
+
+  if (!expectedSupportEmail && !expectedSupportUrl) {
+    const exposesSupportLink =
+      privacyHtml.includes("mailto:") || privacyHtml.includes("Support portal:");
+    if (!exposesSupportLink) {
+      throw new Error("Hosted /privacy page did not expose a support email or support portal.");
+    }
+  }
+}
+
+function truncate(value, maxLength = 240) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+}
+
+function writeUsage(stream = "stdout") {
+  const output = stream === "error" ? console.error : console.log;
+  output(USAGE);
 }
 
 function readSessionCookie(response) {
@@ -391,4 +525,32 @@ function writeStep(message) {
 function writeSuccess(message) {
   console.log("");
   console.log(message);
+}
+
+async function main() {
+  try {
+    const exitCode = await runHostedSmoke(process.argv.slice(2), process.env);
+    process.exitCode = exitCode;
+  } catch (error) {
+    console.error("");
+    if (error instanceof UsageError) {
+      console.error(`Usage error: ${error.message}`);
+      console.error("");
+      writeUsage("error");
+      process.exitCode = 2;
+      return;
+    }
+
+    console.error(`Hosted smoke test failed during step: ${currentStep}`);
+    if (error instanceof Error) {
+      console.error(error.message);
+    } else {
+      console.error(String(error));
+    }
+    process.exitCode = 1;
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
 }

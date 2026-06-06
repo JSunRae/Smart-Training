@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { readPublicSupportContact } from "@/lib/runtime";
+
 import styles from "./privacy.module.css";
 
 export const metadata: Metadata = {
@@ -17,12 +19,12 @@ const SECTIONS = [
   {
     title: "Retention window",
     body:
-      "Transcript history defaults to a 30-day retention window. Deployments can shorten that window, but the launch posture does not retain transcripts longer than 30 days by default."
+      "Completed or abandoned transcript history defaults to a 30-day retention window. Deployments can shorten that window, but the launch posture does not retain non-active transcripts longer than 30 days by default. Active sessions are not pruned until they end."
   },
   {
     title: "Deletion controls",
     body:
-      "Deleting an account removes the user and their related session history immediately. Consent for transcript capture is collected during registration and can be refreshed during login if missing."
+      "Deleting an account removes the signed-in user immediately, clears the current session, and deletes that account's stored sessions and transcript messages right away. If that account is the last member of an organization, org-owned custom scenarios and documents are removed with it. Consent for transcript capture is collected during registration and can be refreshed during login if missing."
   },
   {
     title: "Third-party processing",
@@ -31,24 +33,8 @@ const SECTIONS = [
   }
 ];
 
-function readSupportDetails(): {
-  email: null | string;
-  name: string;
-  url: null | string;
-} {
-  const email = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || null;
-  const name = process.env.NEXT_PUBLIC_SUPPORT_NAME?.trim() || "Smart Training Pilot Support";
-  const url = process.env.NEXT_PUBLIC_SUPPORT_URL?.trim() || null;
-
-  return {
-    email,
-    name,
-    url
-  };
-}
-
 export default function PrivacyPage() {
-  const support = readSupportDetails();
+  const support = readPublicSupportContact();
 
   return (
     <main className={styles.page}>
@@ -107,8 +93,7 @@ export default function PrivacyPage() {
             </div>
           ) : (
             <p>
-              This deployment has not configured a public support contact yet. Before pilot launch,
-              set `NEXT_PUBLIC_SUPPORT_EMAIL` or `NEXT_PUBLIC_SUPPORT_URL`.
+              This deployment has not configured a public support contact yet. {support.requirement}
             </p>
           )}
         </section>

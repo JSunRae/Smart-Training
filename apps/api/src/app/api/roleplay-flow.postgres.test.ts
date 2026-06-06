@@ -20,7 +20,7 @@ import { POST as complete } from "./sessions/[sessionId]/complete/route";
 import { POST as message } from "./sessions/[sessionId]/message/route";
 import { GET as listSessions } from "./sessions/route";
 import { POST as start } from "./sessions/start/route";
-import { resetPostgresRuntime } from "@/lib/postgres";
+import { resetPostgresRuntime, withPostgres } from "@/lib/postgres";
 import { getAccountByEmail } from "@/lib/repository";
 
 describe("roleplay API flow (postgres backend)", () => {
@@ -39,6 +39,7 @@ describe("roleplay API flow (postgres backend)", () => {
     delete process.env.DATA_ENCRYPTION_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.SMART_TRAINING_DB_PATH;
+    delete process.env.SESSION_RETENTION_DAYS;
     await resetPostgresRuntime();
   });
 
@@ -141,6 +142,164 @@ describe("roleplay API flow (postgres backend)", () => {
 
     const sessions = await readJson<SessionsResponse>(sessionsResponse);
     expect(sessions.sessions).toHaveLength(1);
+  });
+
+  it("rejects message and coach turns after a session is completed", async () => {
+    const registered = await registerUser({
+      email: "closed-session@example.com",
+      name: "Robin Vale",
+      organizationName: "State Guard Org"
+    });
+
+    const dashboardResponse = await dashboard(
+      createRequest("/api/dashboard", "GET", undefined, registered.cookie)
+    );
+    const dashboardBody = await readJson<DashboardResponse>(dashboardResponse);
+    const scenarioId = dashboardBody.scenarios[0]?.id;
+
+    expect(scenarioId).toBeTruthy();
+
+    const started = await readJson<SessionResponse>(
+      await start(createRequest("/api/sessions/start", "POST", { scenarioId }, registered.cookie))
+    );
+
+    const completeResponse = await complete(
+      createRequest(`/api/sessions/${started.session.id}/complete`, "POST", undefined, registered.cookie),
+      sessionContext(started.session.id)
+    );
+    expect(completeResponse.status).toBe(200);
+
+    const completed = await readJson<SessionResponse>(completeResponse);
+    expect(completed.session.status).toBe("COMPLETED");
+    expect(completed.session.messageCount).toBe(1);
+    expect(completed.session.coachInterventionCount).toBe(0);
+    expect(completed.session.endedAt).toBeTruthy();
+
+    const messageResponse = await message(
+      createRequest(
+        `/api/sessions/${started.session.id}/message`,
+        "POST",
+        { content: "Following up after completion." },
+        registered.cookie
+      ),
+      sessionContext(started.session.id)
+    );
+    expect(messageResponse.status).toBe(409);
+    await expect(messageResponse.json()).resolves.toEqual({ error: "Session is no longer active." });
+
+    const coachResponse = await coach(
+      createRequest(`/api/sessions/${started.session.id}/coach`, "POST", undefined, registered.cookie),
+      sessionContext(started.session.id)
+    );
+    expect(coachResponse.status).toBe(409);
+    await expect(coachResponse.json()).resolves.toEqual({ error: "Session is no longer active." });
+
+    const detailResponse = await getSession(
+      createRequest(`/api/sessions/${started.session.id}`, "GET", undefined, registered.cookie),
+      sessionContext(started.session.id)
+    );
+    expect(detailResponse.status).toBe(200);
+
+    const detail = await readJson<SessionResponse>(detailResponse);
+    expect(detail.session.status).toBe("COMPLETED");
+    expect(detail.session.endedAt).toBe(completed.session.endedAt);
+    expect(detail.session.messageCount).toBe(completed.session.messageCount);
+    expect(detail.session.coachInterventionCount).toBe(completed.session.coachInterventionCount);
+    expect(detail.session.messages.map((entry) => entry.role)).toEqual(["ASSISTANT"]);
+  });
+
+  it("prunes expired sessions and transcript history when a transaction-backed request runs", async () => {
+    process.env.SESSION_RETENTION_DAYS = "30";
+    const now = Date.now();
+    const expiredStartedAt = new Date(now - 61 * 24 * 60 * 60 * 1000).toISOString();
+    const expiredEndedAt = new Date(now - 60 * 24 * 60 * 60 * 1000).toISOString();
+
+    const registered = await registerUser({
+      email: "pg-retention@example.com",
+      name: "Jordan Pike",
+      organizationName: "Retention Test Org"
+    });
+
+    const dashboardResponse = await dashboard(
+      createRequest("/api/dashboard", "GET", undefined, registered.cookie)
+    );
+    const dashboardBody = await readJson<DashboardResponse>(dashboardResponse);
+    const scenarioId = dashboardBody.scenarios[0]?.id;
+
+    expect(scenarioId).toBeTruthy();
+
+    const started = await readJson<SessionResponse>(
+      await start(createRequest("/api/sessions/start", "POST", { scenarioId }, registered.cookie))
+    );
+
+    const messageResponse = await message(
+      createRequest(
+        `/api/sessions/${started.session.id}/message`,
+        "POST",
+        { content: "Aging this session beyond retention." },
+        registered.cookie
+      ),
+      sessionContext(started.session.id)
+    );
+    expect(messageResponse.status).toBe(200);
+
+    const completeResponse = await complete(
+      createRequest(`/api/sessions/${started.session.id}/complete`, "POST", undefined, registered.cookie),
+      sessionContext(started.session.id)
+    );
+    expect(completeResponse.status).toBe(200);
+
+    const messageCountBeforePrune = await withPostgres(async (pool) => {
+      await pool.query(
+        `
+          UPDATE sessions
+          SET started_at = $2, created_at = $2, ended_at = $3, updated_at = $3
+          WHERE id = $1
+        `,
+        [started.session.id, expiredStartedAt, expiredEndedAt]
+      );
+
+      const result = await pool.query<{ count: number }>(
+        `SELECT COUNT(*)::int AS count FROM messages WHERE session_id = $1`,
+        [started.session.id]
+      );
+
+      return Number(result.rows[0]?.count ?? 0);
+    });
+    expect(messageCountBeforePrune).toBeGreaterThan(0);
+
+    const nextStartResponse = await start(
+      createRequest("/api/sessions/start", "POST", { scenarioId }, registered.cookie)
+    );
+    expect(nextStartResponse.status).toBe(201);
+
+    const nextSession = await readJson<SessionResponse>(nextStartResponse);
+    const sessionsResponse = await listSessions(
+      createRequest("/api/sessions", "GET", undefined, registered.cookie)
+    );
+    expect(sessionsResponse.status).toBe(200);
+
+    const sessions = await readJson<SessionsResponse>(sessionsResponse);
+    expect(sessions.sessions.map((session) => session.id)).toEqual([nextSession.session.id]);
+
+    const retainedState = await withPostgres(async (pool) => {
+      const expiredSessionResult = await pool.query(
+        `SELECT id FROM sessions WHERE id = $1 LIMIT 1`,
+        [started.session.id]
+      );
+      const expiredMessageResult = await pool.query<{ count: number }>(
+        `SELECT COUNT(*)::int AS count FROM messages WHERE session_id = $1`,
+        [started.session.id]
+      );
+
+      return {
+        expiredSessionExists: Boolean(expiredSessionResult.rows[0]),
+        expiredMessageCount: Number(expiredMessageResult.rows[0]?.count ?? 0)
+      };
+    });
+
+    expect(retainedState.expiredSessionExists).toBe(false);
+    expect(retainedState.expiredMessageCount).toBe(0);
   });
 
   it("blocks session access across organizations and deletes account data", async () => {

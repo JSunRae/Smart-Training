@@ -155,6 +155,6 @@ Recommendation:
 
 Use these next:
 
-1. [Cybersecurity and infrastructure pack](/C:/Users/Pilot/Documents/Vs%20Code%20Projects/Smart_Training/docs/VERTICAL_PACK_CYBER_INFRA.md)
-2. [Industrial and field-services pack](/C:/Users/Pilot/Documents/Vs%20Code%20Projects/Smart_Training/docs/VERTICAL_PACK_INDUSTRIAL_FIELD.md)
-3. [Showcase runbook](/C:/Users/Pilot/Documents/Vs%20Code%20Projects/Smart_Training/docs/SHOWCASE_RUNBOOK.md)
+1. [Cybersecurity and infrastructure pack](VERTICAL_PACK_CYBER_INFRA.md)
+2. [Industrial and field-services pack](VERTICAL_PACK_INDUSTRIAL_FIELD.md)
+3. [Showcase runbook](SHOWCASE_RUNBOOK.md)

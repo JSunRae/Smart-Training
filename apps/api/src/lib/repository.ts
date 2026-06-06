@@ -49,6 +49,13 @@ type RegisterAccountInput = {
   passwordHash: string;
 };
 
+export type EnsureSeedDataResult = {
+  backend: "file" | "postgres";
+  inserted: boolean;
+  seedDocumentCount: number;
+  seedScenarioCount: number;
+};
+
 export async function getSessionUserById(
   userId: string,
   organizationId: string
@@ -191,7 +198,16 @@ export async function deleteAccountData(userId: string, organizationId: string):
 
     const remainingUsers = database.users.filter((entry) => entry.organizationId === organizationId);
     if (remainingUsers.length === 0) {
+      const deletedScenarioIds = new Set(
+        database.scenarios
+          .filter((scenario) => scenario.organizationId === organizationId)
+          .map((scenario) => scenario.id)
+      );
+
       database.organizations = database.organizations.filter((entry) => entry.id !== organizationId);
+      database.scenarios = database.scenarios.filter(
+        (scenario) => scenario.organizationId !== organizationId
+      );
       database.sessions = database.sessions.filter(
         (session) => session.organizationId !== organizationId
       );
@@ -199,23 +215,43 @@ export async function deleteAccountData(userId: string, organizationId: string):
       database.messages = database.messages.filter((message) =>
         remainingSessionIds.has(message.sessionId)
       );
+      database.documents = database.documents
+        .filter((document) => document.organizationId !== organizationId)
+        .map((document) =>
+          document.scenarioId && deletedScenarioIds.has(document.scenarioId)
+            ? { ...document, scenarioId: null }
+            : document
+        );
     }
   });
 }
 
-export async function ensureSeedData(): Promise<void> {
+export async function ensureSeedData(): Promise<EnsureSeedDataResult> {
   if (getStorageBackend() === "postgres") {
-    await ensureSeedDataInPostgres();
-    return;
+    const inserted = await ensureSeedDataInPostgres();
+    return {
+      backend: "postgres",
+      inserted,
+      seedDocumentCount: seedData.documents.length,
+      seedScenarioCount: seedData.scenarios.length
+    };
   }
 
-  await updateDatabase((database) => {
+  const inserted = await updateDatabase((database) => {
     if (database.scenarios.length > 0) {
-      return;
+      return false;
     }
 
     seedDatabaseShape(database);
+    return true;
   });
+
+  return {
+    backend: "file",
+    inserted,
+    seedDocumentCount: seedData.documents.length,
+    seedScenarioCount: seedData.scenarios.length
+  };
 }
 
 export async function listAccessibleScenarioRecords(
@@ -768,11 +804,11 @@ async function deleteAccountDataFromPostgres(
   });
 }
 
-async function ensureSeedDataInPostgres(): Promise<void> {
-  await withPostgresTransaction(async (client) => {
+async function ensureSeedDataInPostgres(): Promise<boolean> {
+  return withPostgresTransaction(async (client) => {
     const existingScenario = await client.query(`SELECT 1 FROM scenarios LIMIT 1`);
     if (existingScenario.rows[0]) {
-      return;
+      return false;
     }
 
     const timestamp = nowIso();
@@ -856,6 +892,8 @@ async function ensureSeedDataInPostgres(): Promise<void> {
         ]
       );
     }
+
+    return true;
   });
 }
 

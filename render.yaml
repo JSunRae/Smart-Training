@@ -7,7 +7,7 @@ services:
     autoDeployTrigger: checksPass
     healthCheckPath: /api/health
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build:api
-    preDeployCommand: pnpm --filter api db:migrate && pnpm seed
+    preDeployCommand: pnpm --filter api db:bootstrap && pnpm seed
     startCommand: pnpm --filter api exec next start --port $PORT
     buildFilter:
       paths:

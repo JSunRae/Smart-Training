@@ -21,6 +21,11 @@ export async function withPostgres<T>(
   return callback(runtime.pool);
 }
 
+export async function ensurePostgresSchemaReady(): Promise<void> {
+  const runtime = await getPostgresRuntime();
+  await runtime.ready;
+}
+
 export async function withPostgresTransaction<T>(
   callback: (client: PoolClient) => Promise<T>
 ): Promise<T> {

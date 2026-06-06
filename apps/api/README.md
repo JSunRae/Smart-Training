@@ -17,5 +17,7 @@ Next.js App Router API service for the Smart Training MVP.
 - `pnpm --filter api dev`
 - `pnpm --filter api build`
 - `pnpm --filter api start`
-- `pnpm --filter api db:migrate`
+- `pnpm --filter api db:bootstrap`
 - `pnpm --filter api db:seed`
+
+`pnpm --filter api db:migrate` remains available as a compatibility alias, but the current API service does not use Prisma migrations. Both commands run the same bootstrap script that creates missing tables and indexes directly in Postgres.

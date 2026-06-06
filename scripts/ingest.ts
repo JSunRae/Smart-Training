@@ -1,3 +1,8 @@
+/**
+ * Post-MVP retrieval scaffold.
+ * This file is not wired into the current text-first hosted MVP and only preserves
+ * the minimal chunking/query shape for a later retrieval backend decision.
+ */
 type DocumentChunk = {
   id: string;
   text: string;

@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -82,6 +82,23 @@ describe("store hardening", () => {
       false
     );
     expect(retained.sessions.some((session) => session.id === "session-1")).toBe(true);
+  });
+
+  it("recovers an empty store file as an empty database", async () => {
+    await resetDatabase();
+    await writeFile(path.join(process.cwd(), "data", storeFileName), "", "utf8");
+
+    await expect(readDatabase()).resolves.toEqual({
+      organizations: [],
+      users: [],
+      scenarios: [],
+      sessions: [],
+      messages: [],
+      documents: []
+    });
+
+    const raw = await readFile(path.join(process.cwd(), "data", storeFileName), "utf8");
+    expect(raw.trim()).toBeTruthy();
   });
 });
 

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { MessageRole, SessionStatus, UserRole } from "@core/contracts";
@@ -111,9 +111,14 @@ export async function readDatabase(): Promise<Database> {
 
   try {
     const raw = await readFile(filePath, "utf8");
+    if (!raw.trim()) {
+      await writeDatabaseFile(filePath, EMPTY_DATABASE);
+      return structuredClone(EMPTY_DATABASE);
+    }
+
     const database = applyRetentionPolicy(deserializeDatabase(raw));
     if (database.changed) {
-      await writeFile(filePath, serializeDatabase(database.database), "utf8");
+      await writeDatabaseFile(filePath, database.database);
     }
 
     return database.database;
@@ -122,7 +127,7 @@ export async function readDatabase(): Promise<Database> {
       throw error;
     }
 
-    await writeFile(filePath, serializeDatabase(EMPTY_DATABASE), "utf8");
+    await writeDatabaseFile(filePath, EMPTY_DATABASE);
     return structuredClone(EMPTY_DATABASE);
   }
 }
@@ -134,7 +139,7 @@ export async function updateDatabase<T>(
     const database = await readDatabase();
     const result = await mutator(database);
     const retained = applyRetentionPolicy(database);
-    await writeFile(resolveFileStorePath(), serializeDatabase(retained.database), "utf8");
+    await writeDatabaseFile(resolveFileStorePath(), retained.database);
     return result;
   });
 
@@ -149,7 +154,7 @@ export async function updateDatabase<T>(
 export async function resetDatabase(nextDatabase?: Database): Promise<void> {
   const database = nextDatabase ?? structuredClone(EMPTY_DATABASE);
   await mkdir(path.dirname(resolveFileStorePath()), { recursive: true });
-  await writeFile(resolveFileStorePath(), serializeDatabase(database), "utf8");
+  await writeDatabaseFile(resolveFileStorePath(), database);
 }
 
 export function createId(): string {
@@ -188,6 +193,12 @@ function serializeDatabase(database: Database): string {
   };
 
   return JSON.stringify(persisted, null, 2);
+}
+
+async function writeDatabaseFile(filePath: string, database: Database): Promise<void> {
+  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  await writeFile(tempPath, serializeDatabase(database), "utf8");
+  await rename(tempPath, filePath);
 }
 
 function deserializeDatabase(raw: string): Database {

@@ -3,16 +3,21 @@ import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vitest/config";
 
-const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+const rootDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   resolve: {
     alias: {
-      "@": path.resolve(projectRoot, "apps/api/src"),
-      "@core": path.resolve(projectRoot, "packages/core/src")
+      "@": path.resolve(rootDirectory, "apps/api/src"),
+      "@core": path.resolve(rootDirectory, "packages/core/src"),
+      "@prompts": path.resolve(rootDirectory, "packages/prompts")
     }
   },
   test: {
-    include: ["packages/**/*.test.ts", "apps/**/*.test.ts"]
+    include: [
+      "packages/**/*.test.ts",
+      "apps/**/*.test.ts",
+      "scripts/**/*.test.{js,mjs,ts}"
+    ]
   }
 });

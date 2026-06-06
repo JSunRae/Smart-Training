@@ -9,4 +9,4 @@ Sales Challenger Trainer is an AI-driven roleplay platform where sellers practic
 - Session player with buyer responses
 - Pause-for-coach intervention
 - Prompt-driven personas
-- RAG-backed context retrieval
+- Deterministic prompt and scenario context without a retrieval dependency
