@@ -70,7 +70,7 @@
 
 - Refreshed transitive dependency overrides for `form-data`, `@babel/core`, `js-yaml`, and `esbuild` after current audit advisories made the previous lockfile stale.
 - Confirmed both `pnpm audit --prod` and full `pnpm audit` return no known vulnerabilities after the override refresh.
-- Confirmed `CI=true pnpm release:check` passes on the current working tree with 48 Vitest tests, web/API builds, the Playwright launch-flow E2E test, and `pnpm audit --prod`.
+- Confirmed `CI=true pnpm release:check` passes from the committed July 13 launch candidate with 48 Vitest tests, web/API builds, the Playwright launch-flow E2E test, and `pnpm audit --prod`.
 - Found that local non-CI Playwright can reuse an unrelated server on `localhost:3000`; use `CI=true` or clear the port when running launch-gate E2E locally.
 - Noted a post-pilot voice hardening item: the current web `Permissions-Policy` sets `microphone=()`, so `/voice-lab` browser microphone access must be reworked before voice is exposed.
 
@@ -80,7 +80,7 @@
 - Realtime audio remains experimental and out of the pilot gate unless the owner explicitly changes scope; before enabling it, fix and verify the web microphone permissions policy.
 - Pricing and usage scripts stay out of scope until post-MVP billing/reporting requirements are approved.
 - Hosted database bootstrap evidence has not been captured from a live database yet.
-- The previous launch candidate is committed and tagged, but it predates the July 13 dependency-audit refresh. Commit/tag the current fixed revision before deploy; hosted evidence is still incomplete.
+- The current launch candidate is recorded as `pilot-launch-2026-07-13`; hosted evidence is still incomplete.
 
 ## Follow-up Queue (After The Pilot-Ready Line)
 
@@ -90,12 +90,10 @@ Use this as the short planning queue once the current MVP boundary is accepted. 
 
 Use [FINAL_READINESS_REVIEW.md](FINAL_READINESS_REVIEW.md) as the final meeting prompt before external access opens.
 
-1. Commit and push the July 13 dependency-audit refresh, then create or record the new launch anchor.
-2. Rerun `pnpm release:check` from the committed launch revision and update [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).
-3. Capture the hosted evidence package in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md): live `GET /api/health`, `pnpm smoke:hosted`, hosted QA, and demo rehearsal results.
-4. Fill live deployment metadata and rollback anchors in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md): web URL, API URL, health URL, support contact, and known-good deploy ids.
-5. Verify the hosted pilot posture from the live environment: Postgres-backed health, `/privacy` support contact visibility, explicit backup/restore ownership, `OPENAI_TEXT_ENABLED=false`, and `VOICE_LAB_ENABLED=false`.
-6. Capture Section 4A monitoring and backup/export evidence: health probe, restart/crash visibility, service logs, database visibility, backup/PITR confirmation, and manual logical export.
+1. Capture the hosted evidence package in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md): live `GET /api/health`, `pnpm smoke:hosted`, hosted QA, and demo rehearsal results.
+2. Fill live deployment metadata and rollback anchors in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md): web URL, API URL, health URL, support contact, and known-good deploy ids.
+3. Verify the hosted pilot posture from the live environment: Postgres-backed health, `/privacy` support contact visibility, explicit backup/restore ownership, `OPENAI_TEXT_ENABLED=false`, and `VOICE_LAB_ENABLED=false`.
+4. Capture Section 4A monitoring and backup/export evidence: health probe, restart/crash visibility, service logs, database visibility, backup/PITR confirmation, and manual logical export.
 
 ### Pilot hardening
 
