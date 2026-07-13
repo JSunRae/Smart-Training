@@ -1,3 +1,13 @@
 packages:
   - apps/*
   - packages/*
+
+overrides:
+  brace-expansion@<2: 1.1.13
+  "brace-expansion@>=5 <6": 5.0.6
+  flatted: 3.4.2
+  postcss: 8.5.14
+  "form-data@>=4.0.0 <4.0.6": 4.0.6
+  "@babel/core@<=7.29.0": 7.29.6
+  "js-yaml@>=4.0.0 <=4.1.1": 4.2.0
+  "esbuild@>=0.27.3 <0.28.1": 0.28.1

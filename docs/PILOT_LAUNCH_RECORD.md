@@ -1,6 +1,6 @@
 # Pilot Launch Record
 
-Last updated: 2026-06-06
+Last updated: 2026-07-13
 Status: fill this before opening external pilot access
 
 Use this file as the single launch-control record for the first hosted pilot.
@@ -36,7 +36,7 @@ For live step order during rollout, use [HOSTED_LAUNCH_WORKSHEET.md](./HOSTED_LA
 
 | Item                                       | Value                                                                       |
 | ------------------------------------------ | --------------------------------------------------------------------------- |
-| Git revision / release tag                 | Branch `codex/launch-readiness-audit`; tag `pilot-launch-2026-06-05`         |
+| Git revision / release tag                 | `TBD - choose a committed revision after the 2026-07-13 dependency-audit refresh; previous tag pilot-launch-2026-06-05 predates the current override fixes` |
 | Web URL                                    | `TBD`                                                                       |
 | API URL                                    | `TBD`                                                                       |
 | `/api/health` URL                          | `TBD`                                                                       |
@@ -66,7 +66,7 @@ For `pnpm release:check`, record the repo-root run from the launch revision only
 
 | Check | Acceptable evidence | Command / action | Result | Operator | Timestamp | Artifact / note location | Failure follow-up |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `pnpm release:check` | Release gate passed | `pnpm release:check` | `PASS - committed launch revision tagged pilot-launch-2026-06-05 passed typecheck, lint, 48 Vitest tests, build, Playwright E2E, and pnpm audit --prod` | `Pilot` | `2026-06-06 Europe/Berlin` | `n/a` | `n/a` |
+| `pnpm release:check` | Release gate passed | `TBD - rerun on the selected committed launch revision` | `TBD - 2026-07-13 current working tree passed with CI=true after dependency-audit overrides; do not treat as final launch evidence until committed/tagged and rerun` | `Pilot` | `2026-07-13 02:12 Europe/Berlin` | `n/a` | `Commit/tag the fixed revision, then rerun and replace this row with PASS or FAIL evidence.` |
 | Live `/api/health` posture check | Four-key health posture | `Invoke-RestMethod [health url] \| ConvertTo-Json -Depth 5` | `TBD` | `TBD` | `TBD` | `Health URL plus saved response path/URL, or n/a.` | `If FAIL, note owner and next step.` |
 | `pnpm smoke:hosted` | Hosted smoke passed | `pnpm smoke:hosted -- --api [api url] --web [web url] --support-email [support email]` | `TBD` | `TBD` | `TBD` | `Saved log path, screenshot path, or note URL, or n/a.` | `If FAIL, note blocker and owner.` |
 | Pre-pilot logical export evidence | Export artifact verified | `Run pre-pilot pg_dump export and verify stored artifact exists` | `TBD` | `TBD` | `TBD` | `Artifact filename plus storage path.` | `If FAIL, note re-run timing.` |
@@ -74,9 +74,9 @@ For `pnpm release:check`, record the repo-root run from the launch revision only
 | Hosted demo rehearsal | Demo rehearsal passed | `Manual rehearsal using hosted demo flow` | `TBD` | `TBD` | `TBD` | `Recording, screenshot path, or note URL with scenario used.` | `If FAIL, note retry plan.` |
 | `/privacy` support contact visible | Support contact confirmed | `Open [web url]/privacy` | `TBD` | `TBD` | `TBD` | `Screenshot path, page URL, or note URL proving the configured support contact and retention/deletion wording.` | `If FAIL, note config fix owner.` |
 
-Keep hosted-dependent `TBD` values in this file until the hosted environment exists and the evidence has been captured from the live pilot deployment. Preflight evidence that does not depend on the hosted environment, such as `pnpm release:check`, can be recorded when it is actually run.
+Keep hosted-dependent `TBD` values in this file until the hosted environment exists and the evidence has been captured from the live pilot deployment. Preflight evidence that does not depend on the hosted environment, such as `pnpm release:check`, can be recorded when it is actually run from the selected committed launch revision. A dirty working-tree pass is useful audit evidence, but it does not replace launch-revision evidence.
 
-The full dev dependency audit also passed from the committed launch revision on 2026-06-06: `pnpm audit` returned `No known vulnerabilities found`.
+The current working tree full dev dependency audit passed on 2026-07-13 after transitive override refresh: `pnpm audit` and `pnpm audit --prod` both returned `No known vulnerabilities found`. Commit/tag the fixed revision before treating this as launch evidence.
 
 For `pnpm release:check`, `PASS` means typecheck, lint, Vitest, build, Playwright E2E, and `pnpm audit --prod` all completed and the command exited `0`.
 

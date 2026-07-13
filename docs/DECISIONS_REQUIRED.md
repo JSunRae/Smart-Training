@@ -1,6 +1,6 @@
 # Decisions Required (Owner)
 
-Last updated: 2026-05-29
+Last updated: 2026-06-12
 
 This register tracks the current status of owner decisions against the implementation and launch posture in the repo. It is intended to be a live status artifact, not a brainstorming note.
 
@@ -10,22 +10,22 @@ Use [FINAL_READINESS_REVIEW.md](./FINAL_READINESS_REVIEW.md) to run the final si
 
 | Decision | Status | Current direction | Next action |
 | --- | --- | --- | --- |
-| D-001 | Implemented | Text-first MVP boundary is already reflected in product flows and launch docs | Owner to formally approve this as the pilot MVP boundary |
-| D-002 | Implemented | First-party email/password auth with org-scoped tenancy is the current implementation | Owner to approve keeping this model for pilot instead of introducing external auth/SSO |
-| D-003 | Deferred | No vector backend is in the MVP path; current retrieval uses local snippet ranking over scenario and document text | Owner to approve deferring pgvector/external vector DB selection for pilot |
-| D-004 | Implemented | Text-first synchronous loop is the pilot path; voice remains experimental and disabled for launch | Owner to confirm that realtime audio is out of pilot scope |
-| D-005 | Partially implemented | Repo gates and QA artifacts exist, but final owner-approved pass set for pilot sign-off is not yet explicit | Owner to approve the exact go/no-go checklist for pilot launch |
-| D-006 | Implemented | Current MVP posture includes consent, deletion, retention, and support-contact requirements | Owner to approve the policy posture and complete hosted evidence capture |
+| D-001 | Approved for pilot | Text-first MVP boundary is approved for the first hosted pilot | No pre-pilot action unless scope changes |
+| D-002 | Approved for pilot | First-party email/password auth with org-scoped tenancy is approved for the first hosted pilot | No pre-pilot action unless external auth becomes mandatory |
+| D-003 | Approved deferral | No vector backend is in the MVP path; current retrieval uses local snippet ranking over scenario and document text | Keep deferred unless retrieval quality becomes a proven pilot blocker |
+| D-004 | Approved for pilot | Text-first synchronous loop is the pilot path; voice remains experimental and disabled for launch | Keep `VOICE_LAB_ENABLED=false` in the hosted pilot |
+| D-005 | Approved for pilot | `pnpm release:check`, hosted smoke, hosted QA, hosted demo rehearsal, privacy, monitoring, backup/export, and launch-record evidence are the pilot pass set | Complete hosted evidence in `docs/PILOT_LAUNCH_RECORD.md` |
+| D-006 | Approved for pilot | Current MVP posture includes consent, deletion, 30-day retention, support-contact requirements, and opt-in third-party AI processing | Complete hosted evidence capture before external access |
 
 ## Decision Triage For The First Pilot
 
-- Pre-pilot blockers: D-005 launch gate approval and D-006 hosted evidence capture remain tied to the current go/no-go path.
-- Pilot hardening: D-001 and D-002 still need explicit owner approval so the implemented MVP and auth posture are intentional rather than implied.
+- Pre-pilot blockers: D-006 hosted evidence capture remains tied to the current go/no-go path through [PILOT_LAUNCH_RECORD.md](./PILOT_LAUNCH_RECORD.md).
+- Pilot posture approvals: D-001, D-002, D-004, D-005, and the D-006 policy posture are approved for the first hosted pilot based on the owner's implementation request on 2026-06-12.
 - Post-launch unless evidence changes: D-003 retrieval backend expansion and D-004 realtime transport hardening are intentionally deferred for the first text-first pilot.
 
 ## D-001: MVP Boundary (Near-Full)
 
-**Status**: Implemented current direction, pending formal owner sign-off.
+**Status**: Approved for the first hosted pilot.
 
 **Implemented current direction**:
 
@@ -37,18 +37,18 @@ Use [FINAL_READINESS_REVIEW.md](./FINAL_READINESS_REVIEW.md) to run the final si
 - README and launch docs describe a text-first MVP with dashboard, scenario library, roleplay sessions, coach intervention, and persisted transcripts.
 - Route tests cover the full roleplay lifecycle and transcript history for that journey.
 
-**Required owner approval**:
+**Owner approval recorded 2026-06-12**:
 
 - Approve that the pilot MVP boundary is the current text-first workflow.
 - Approve that reporting/admin depth and native/mobile work stay out of pilot scope.
 
-**Next action**: Mark this boundary approved in the launch record or keep it explicitly constrained as the pilot scope baseline.
+**Next action**: Keep this boundary constrained as the pilot scope baseline unless the owner explicitly changes scope.
 
 ---
 
 ## D-002: Auth + Tenant Model
 
-**Status**: Implemented current direction, pending formal owner sign-off.
+**Status**: Approved for the first hosted pilot.
 
 **Implemented current direction**:
 
@@ -62,19 +62,19 @@ Use [FINAL_READINESS_REVIEW.md](./FINAL_READINESS_REVIEW.md) to run the final si
 - There is no external auth provider, SSO, or multi-org membership model in the implementation.
 - Integration tests explicitly cover cross-organization access blocking.
 
-**Required owner approval**:
+**Owner approval recorded 2026-06-12**:
 
 - Approve keeping first-party email/password auth for pilot.
 - Approve the current one-organization-per-user tenant model for pilot.
 - Approve deferring external auth/SSO and deeper role-based authorization until after pilot unless they become launch blockers.
 
-**Next action**: Record explicit owner approval of the current auth and tenant posture, or reopen scope if external auth is mandatory before pilot.
+**Next action**: Keep external auth, SSO, and deeper role-based authorization deferred unless they become mandatory before pilot.
 
 ---
 
 ## D-003: Retrieval Backend
 
-**Status**: Deferred decision.
+**Status**: Approved deferral for the first hosted pilot.
 
 **Implemented current direction**:
 
@@ -87,21 +87,21 @@ Use [FINAL_READINESS_REVIEW.md](./FINAL_READINESS_REVIEW.md) to run the final si
 - The MVP can run without a vector backend today.
 - Retrieval quality for the current pilot depends on seeded scenario/document content plus local snippet ranking, not on vector search infrastructure.
 
-**Deferred decision**:
+**Approved deferral**:
 
 - Defer pgvector vs external vector DB selection until post-pilot hardening unless retrieval quality becomes a pilot blocker.
 
-**Required owner approval**:
+**Owner approval recorded 2026-06-12**:
 
 - Approve shipping the pilot without committing to pgvector, Pinecone, Weaviate, OpenSearch, or another vector backend.
 
-**Next action**: Either approve the deferral for pilot, or explicitly fund a retrieval-backend implementation as a new pre-pilot requirement.
+**Next action**: Keep vector backend selection and production ingestion out of the pre-pilot lane unless retrieval quality becomes a proven blocker.
 
 ---
 
 ## D-004: Realtime Transport Strategy
 
-**Status**: Implemented current direction, pending formal owner confirmation of scope.
+**Status**: Approved for the first hosted pilot.
 
 **Implemented current direction**:
 
@@ -114,7 +114,7 @@ Use [FINAL_READINESS_REVIEW.md](./FINAL_READINESS_REVIEW.md) to run the final si
 - Realtime audio is not required for the MVP gate.
 - WebRTC voice experimentation is available only when deliberately enabled and configured with OpenAI credentials.
 
-**Required owner approval**:
+**Owner approval recorded 2026-06-12**:
 
 - Confirm that realtime audio is not part of the first hosted pilot scope.
 - Confirm that `/voice-lab` remains experimental and disabled in the pilot environment.
@@ -125,7 +125,7 @@ Use [FINAL_READINESS_REVIEW.md](./FINAL_READINESS_REVIEW.md) to run the final si
 
 ## D-005: Test Quality Gate
 
-**Status**: Partially implemented.
+**Status**: Approved for the first hosted pilot; hosted evidence still pending.
 
 **Selected direction**:
 
@@ -138,17 +138,18 @@ Use [FINAL_READINESS_REVIEW.md](./FINAL_READINESS_REVIEW.md) to run the final si
 - Manual QA and hosted QA/runbook documents exist and are tied to launch readiness.
 - Readiness docs define exit criteria for a testable product.
 
-**Required owner approval**:
+**Owner approval recorded 2026-06-12**:
 
-- Approve the exact pilot go/no-go pass set: which automated checks are mandatory, which manual checklist items are mandatory, and whether any hosted evidence can be waived.
+- Approve the exact pilot go/no-go pass set: `pnpm release:check`, live `/api/health`, hosted smoke, hosted QA checklist, hosted demo rehearsal, `/privacy` support contact visibility, monitoring evidence, rollback anchors, and pre-pilot logical export evidence.
+- Approve that no hosted evidence is waived before external pilot access.
 
-**Next action**: Convert the current gate from "implemented in practice" to "owner-approved release standard" by approving [FINAL_READINESS_REVIEW.md](./FINAL_READINESS_REVIEW.md) as the final mandatory checklist.
+**Next action**: Complete the hosted evidence rows in [PILOT_LAUNCH_RECORD.md](./PILOT_LAUNCH_RECORD.md).
 
 ---
 
 ## D-006: Privacy Guardrails for Pilot Testing
 
-**Status**: Implemented current direction, pending policy sign-off and hosted evidence capture.
+**Status**: Privacy posture approved for the first hosted pilot; hosted evidence still pending.
 
 **Implemented current direction**:
 
@@ -163,7 +164,7 @@ Use [FINAL_READINESS_REVIEW.md](./FINAL_READINESS_REVIEW.md) to run the final si
 - The current pilot posture is privacy-constrained and text-first by default.
 - Optional OpenAI processing is treated as opt-in and documented as third-party processing when enabled.
 
-**Required owner approval**:
+**Owner approval recorded 2026-06-12**:
 
 - Approve the current minimum privacy posture for pilot: consent, deletion, 30-day default retention, support contact ownership, and opt-in third-party AI processing.
 - Approve that hosted evidence still must be captured before launch, even though the repo posture is already implemented.

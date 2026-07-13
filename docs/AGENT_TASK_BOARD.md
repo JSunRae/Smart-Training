@@ -24,7 +24,7 @@
 ## Started This Sprint (Readiness Execution)
 
 - [x] Define near-full MVP acceptance criteria by user journey.
-- [x] Document the implemented email/password auth and org-scoped tenant model; formal owner sign-off still pending.
+- [x] Document the implemented email/password auth and org-scoped tenant model; owner approval is recorded for the first hosted pilot.
 - [x] Implement API session lifecycle endpoints for integration testing.
 - [x] Add deterministic DB seed workflow for repeatable tests.
 - [x] Add API integration test suite for critical roleplay flow.
@@ -60,13 +60,27 @@
 - Confirmed full `pnpm audit` reports no known vulnerabilities.
 - Created annotated launch anchor tag `pilot-launch-2026-06-05` on the passing committed revision.
 
+## Progress Notes (2026-06-12)
+
+- Confirmed `pnpm release:check` still passes on the current launch revision with 48 Vitest tests, the Playwright launch-flow E2E test, web/API builds, lint, typecheck, and `pnpm audit --prod`.
+- Recorded owner approval for the text-first MVP boundary, first-party auth and org-scoped tenant model, release gate, privacy posture, retrieval deferral, and voice-disabled pilot scope in `docs/DECISIONS_REQUIRED.md`.
+- Kept hosted launch evidence as no-go until real Render URLs, deploy ids, support contact, smoke, hosted QA, hosted demo, monitoring, and export evidence are captured.
+
+## Progress Notes (2026-07-13)
+
+- Refreshed transitive dependency overrides for `form-data`, `@babel/core`, `js-yaml`, and `esbuild` after current audit advisories made the previous lockfile stale.
+- Confirmed both `pnpm audit --prod` and full `pnpm audit` return no known vulnerabilities after the override refresh.
+- Confirmed `CI=true pnpm release:check` passes on the current working tree with 48 Vitest tests, web/API builds, the Playwright launch-flow E2E test, and `pnpm audit --prod`.
+- Found that local non-CI Playwright can reuse an unrelated server on `localhost:3000`; use `CI=true` or clear the port when running launch-gate E2E locally.
+- Noted a post-pilot voice hardening item: the current web `Permissions-Policy` sets `microphone=()`, so `/voice-lab` browser microphone access must be reworked before voice is exposed.
+
 ## Risks / Follow-ups
 
-- Retrieval backend choice is intentionally deferred for the text-first pilot; owner approval is still needed if that deferral is the launch posture.
-- Realtime audio remains experimental and out of the pilot gate unless the owner explicitly changes scope.
+- Retrieval backend choice is intentionally deferred and owner-approved for the text-first pilot.
+- Realtime audio remains experimental and out of the pilot gate unless the owner explicitly changes scope; before enabling it, fix and verify the web microphone permissions policy.
 - Pricing and usage scripts stay out of scope until post-MVP billing/reporting requirements are approved.
 - Hosted database bootstrap evidence has not been captured from a live database yet.
-- The launch candidate is committed and tagged, but it has not been deployed and hosted evidence is still incomplete.
+- The previous launch candidate is committed and tagged, but it predates the July 13 dependency-audit refresh. Commit/tag the current fixed revision before deploy; hosted evidence is still incomplete.
 
 ## Follow-up Queue (After The Pilot-Ready Line)
 
@@ -76,19 +90,21 @@ Use this as the short planning queue once the current MVP boundary is accepted. 
 
 Use [FINAL_READINESS_REVIEW.md](FINAL_READINESS_REVIEW.md) as the final meeting prompt before external access opens.
 
-1. Capture the hosted evidence package in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md): live `GET /api/health`, `pnpm smoke:hosted`, hosted QA, and demo rehearsal results.
-2. Fill live deployment metadata and rollback anchors in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md): web URL, API URL, health URL, support contact, and known-good deploy ids.
-3. Verify the hosted pilot posture from the live environment: Postgres-backed health, `/privacy` support contact visibility, explicit backup/restore ownership, `OPENAI_TEXT_ENABLED=false`, and `VOICE_LAB_ENABLED=false`.
-4. If the deployed revision changes after `pilot-launch-2026-06-05`, rerun `pnpm release:check` and update the launch record before opening access.
+1. Commit and push the July 13 dependency-audit refresh, then create or record the new launch anchor.
+2. Rerun `pnpm release:check` from the committed launch revision and update [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).
+3. Capture the hosted evidence package in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md): live `GET /api/health`, `pnpm smoke:hosted`, hosted QA, and demo rehearsal results.
+4. Fill live deployment metadata and rollback anchors in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md): web URL, API URL, health URL, support contact, and known-good deploy ids.
+5. Verify the hosted pilot posture from the live environment: Postgres-backed health, `/privacy` support contact visibility, explicit backup/restore ownership, `OPENAI_TEXT_ENABLED=false`, and `VOICE_LAB_ENABLED=false`.
+6. Capture Section 4A monitoring and backup/export evidence: health probe, restart/crash visibility, service logs, database visibility, backup/PITR confirmation, and manual logical export.
 
 ### Pilot hardening
 
-1. Record explicit owner approval of the implemented pilot posture: MVP boundary, auth and tenant model, release gate, and privacy posture.
+1. Keep the approved pilot posture unchanged unless hosted evidence proves a scope change is required.
 
 ### Post-launch improvement
 
 1. Retrieval backend expansion beyond local snippet ranking, including vector backend selection and a production ingestion path, stays deferred unless retrieval quality becomes a proved pilot blocker.
-2. Voice transport hardening or productionizing `/voice-lab` stays non-blocking while the pilot remains text-first with `VOICE_LAB_ENABLED=false`.
+2. Voice transport hardening or productionizing `/voice-lab` stays non-blocking while the pilot remains text-first with `VOICE_LAB_ENABLED=false`; include browser microphone permissions-policy verification when this work starts.
 3. Advanced analytics, deeper reporting, and richer scorecard depth stay outside the first pilot gate.
 4. Role-specific admin depth, richer RBAC, and broader multi-org admin tooling stay deferred until after pilot.
 5. Usage and pricing instrumentation remain post-pilot utilities rather than launch criteria.
