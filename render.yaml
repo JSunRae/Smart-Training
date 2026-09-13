@@ -69,7 +69,7 @@ services:
       - key: NEXT_PUBLIC_SUPPORT_NAME
         value: Smart Training Pilot Support
       - key: NEXT_PUBLIC_SUPPORT_EMAIL
-        sync: false
+        value: Jason_C_Rae@Outlook.com
 
 databases:
   - name: smart-training-db
