@@ -16,6 +16,7 @@ type ViewState =
 export function SessionShell({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const messageRequestInFlightRef = useRef(false);
   const [viewState, setViewState] = useState<ViewState>({ status: "loading" });
   const [draft, setDraft] = useState("");
   const [busyAction, setBusyAction] = useState<"message" | "coach" | "complete" | null>(null);
@@ -49,11 +50,19 @@ export function SessionShell({ sessionId }: { sessionId: string }) {
     transcriptEndRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [session?.messages.length]);
 
-  async function sendDraftMessage(content: string) {
-    if (!session || session.status !== "ACTIVE") {
+  async function sendDraftMessage(nextDraft: string) {
+    const content = nextDraft.trim();
+
+    if (
+      !session ||
+      session.status !== "ACTIVE" ||
+      !content ||
+      messageRequestInFlightRef.current
+    ) {
       return;
     }
 
+    messageRequestInFlightRef.current = true;
     setBusyAction("message");
     setActionError(null);
 
@@ -64,21 +73,21 @@ export function SessionShell({ sessionId }: { sessionId: string }) {
       setViewState({ status: "ready", session: response.session });
       setDraft("");
     } catch (error) {
-      setActionError(toErrorMessage(error, "Unable to send the seller message."));
+      setActionError(
+        toErrorMessage(
+          error,
+          "Unable to send the seller message. Your draft is still here, so you can retry."
+        )
+      );
     } finally {
+      messageRequestInFlightRef.current = false;
       setBusyAction(null);
     }
   }
 
   async function handleSendMessage(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const content = draft.trim();
-
-    if (!content) {
-      return;
-    }
-
-    await sendDraftMessage(content);
+    await sendDraftMessage(draft);
   }
 
   async function handleCoachPause() {
@@ -225,7 +234,7 @@ export function SessionShell({ sessionId }: { sessionId: string }) {
                   onKeyDown={(event) => {
                     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                       event.preventDefault();
-                      void sendDraftMessage(draft.trim());
+                      void sendDraftMessage(draft);
                     }
                   }}
                   placeholder="Answer the buyer with evidence, commercial pressure, and a clear next question."
