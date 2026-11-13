@@ -18,6 +18,7 @@ import {
   createId,
   nowIso,
   readDatabase,
+  type AccountAccessState,
   type Database,
   type DocumentRecord,
   type MessageRecord,
@@ -127,10 +128,7 @@ export async function markTranscriptConsent(
 
 export async function registerAccount(
   input: RegisterAccountInput
-): Promise<
-  | { error: string; status: 409 }
-  | { user: SessionUser }
-> {
+): Promise<{ error: string; status: 409 } | { user: SessionUser }> {
   if (getStorageBackend() === "postgres") {
     return registerAccountInPostgres(input);
   }
@@ -170,7 +168,9 @@ export async function registerAccount(
       transcriptConsentAt: timestamp,
       createdAt: timestamp,
       updatedAt: timestamp,
-      organizationId: organization.id
+      organizationId: organization.id,
+      accessState: "unapproved",
+      sessionVersion: 0
     };
 
     database.users.push(user);
@@ -187,16 +187,16 @@ export async function deleteAccountData(userId: string, organizationId: string):
 
   await updateDatabase((database) => {
     const sessionIds = new Set(
-      database.sessions
-        .filter((session) => session.userId === userId)
-        .map((session) => session.id)
+      database.sessions.filter((session) => session.userId === userId).map((session) => session.id)
     );
 
     database.messages = database.messages.filter((message) => !sessionIds.has(message.sessionId));
     database.sessions = database.sessions.filter((session) => session.userId !== userId);
     database.users = database.users.filter((entry) => entry.id !== userId);
 
-    const remainingUsers = database.users.filter((entry) => entry.organizationId === organizationId);
+    const remainingUsers = database.users.filter(
+      (entry) => entry.organizationId === organizationId
+    );
     if (remainingUsers.length === 0) {
       const deletedScenarioIds = new Set(
         database.scenarios
@@ -204,7 +204,9 @@ export async function deleteAccountData(userId: string, organizationId: string):
           .map((scenario) => scenario.id)
       );
 
-      database.organizations = database.organizations.filter((entry) => entry.id !== organizationId);
+      database.organizations = database.organizations.filter(
+        (entry) => entry.id !== organizationId
+      );
       database.scenarios = database.scenarios.filter(
         (scenario) => scenario.organizationId !== organizationId
       );
@@ -290,7 +292,7 @@ export async function getScenarioContext(
 
   return {
     scenario,
-    documents: database.documents.filter((document) => document.scenarioId === scenario.id)
+    documents: listAccessibleDocuments(database, scenario.id, organizationId)
   };
 }
 
@@ -327,7 +329,7 @@ export async function getHydratedSessionContext(
 
   return {
     ...session,
-    documents: database.documents.filter((document) => document.scenarioId === session.scenario.id)
+    documents: listAccessibleDocuments(database, session.scenario.id, organizationId)
   };
 }
 
@@ -376,7 +378,7 @@ export async function createSessionWithOpening(
 
     return {
       ...hydrated,
-      documents: database.documents.filter((document) => document.scenarioId === hydrated.scenario.id)
+      documents: listAccessibleDocuments(database, hydrated.scenario.id, user.organizationId)
     };
   });
 }
@@ -389,13 +391,7 @@ export async function appendSessionMessages(
   coachDelta = 0
 ): Promise<HydratedSessionContext | null> {
   if (getStorageBackend() === "postgres") {
-    return appendSessionMessagesInPostgres(
-      sessionId,
-      userId,
-      organizationId,
-      messages,
-      coachDelta
-    );
+    return appendSessionMessagesInPostgres(sessionId, userId, organizationId, messages, coachDelta);
   }
 
   return updateDatabase((database) => {
@@ -432,7 +428,7 @@ export async function appendSessionMessages(
 
     return {
       ...hydrated,
-      documents: database.documents.filter((document) => document.scenarioId === hydrated.scenario.id)
+      documents: listAccessibleDocuments(database, hydrated.scenario.id, organizationId)
     };
   });
 }
@@ -449,9 +445,7 @@ export async function completeSessionRecord(
   return updateDatabase((database) => {
     const session = database.sessions.find(
       (entry) =>
-        entry.id === sessionId &&
-        entry.userId === userId &&
-        entry.organizationId === organizationId
+        entry.id === sessionId && entry.userId === userId && entry.organizationId === organizationId
     );
     if (!session) {
       return null;
@@ -471,18 +465,23 @@ export async function completeSessionRecord(
 
     return {
       ...hydrated,
-      documents: database.documents.filter((document) => document.scenarioId === hydrated.scenario.id)
+      documents: listAccessibleDocuments(database, hydrated.scenario.id, organizationId)
     };
   });
 }
 
-function toSessionUser(user: UserRecord, organization: OrganizationRecord): SessionUser {
+export function toSessionUser(
+  user: UserRecord,
+  organization: Pick<OrganizationRecord, "id" | "name" | "slug">
+): SessionUser {
   return {
     id: user.id,
     email: user.email,
     name: user.name,
     organizationId: user.organizationId,
     role: user.role,
+    accessState: user.accessState ?? "unapproved",
+    sessionVersion: user.sessionVersion ?? 0,
     transcriptConsentAt: user.transcriptConsentAt ? new Date(user.transcriptConsentAt) : null,
     organization
   };
@@ -534,16 +533,24 @@ function seedDatabaseShape(database: Database): void {
   }
 }
 
-function findAccessibleScenario(
-  database: Database,
-  scenarioId: string,
-  organizationId: string
-) {
+function findAccessibleScenario(database: Database, scenarioId: string, organizationId: string) {
   return database.scenarios.find(
     (scenario) =>
       scenario.id === scenarioId &&
       scenario.isActive &&
       (scenario.organizationId === null || scenario.organizationId === organizationId)
+  );
+}
+
+function listAccessibleDocuments(
+  database: Database,
+  scenarioId: string,
+  organizationId: string
+): DocumentRecord[] {
+  return database.documents.filter(
+    (document) =>
+      document.scenarioId === scenarioId &&
+      (document.organizationId === null || document.organizationId === organizationId)
   );
 }
 
@@ -555,9 +562,7 @@ function findAccessibleSession(
 ) {
   const session = database.sessions.find(
     (entry) =>
-      entry.id === sessionId &&
-      entry.userId === userId &&
-      entry.organizationId === organizationId
+      entry.id === sessionId && entry.userId === userId && entry.organizationId === organizationId
   );
 
   return session ? buildHydratedSession(database, session) : null;
@@ -681,10 +686,7 @@ async function markTranscriptConsentFromPostgres(
 
 async function registerAccountInPostgres(
   input: RegisterAccountInput
-): Promise<
-  | { error: string; status: 409 }
-  | { user: SessionUser }
-> {
+): Promise<{ error: string; status: 409 } | { user: SessionUser }> {
   return withPostgresTransaction(async (client) => {
     const existingUser = await client.query(
       `SELECT id FROM users WHERE email_lookup_hash = $1 LIMIT 1`,
@@ -745,7 +747,9 @@ async function registerAccountInPostgres(
       transcriptConsentAt: timestamp,
       createdAt: timestamp,
       updatedAt: timestamp,
-      organizationId: organization.id
+      organizationId: organization.id,
+      accessState: "unapproved",
+      sessionVersion: 0
     };
 
     await client.query(
@@ -758,11 +762,13 @@ async function registerAccountInPostgres(
           password_hash,
           role,
           transcript_consent_at,
+          access_state,
+          session_version,
           created_at,
           updated_at,
           organization_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       `,
       [
         user.id,
@@ -772,6 +778,8 @@ async function registerAccountInPostgres(
         encryptString(user.passwordHash),
         user.role,
         user.transcriptConsentAt,
+        user.accessState ?? "unapproved",
+        user.sessionVersion ?? 0,
         user.createdAt,
         user.updatedAt,
         user.organizationId
@@ -789,10 +797,10 @@ async function deleteAccountDataFromPostgres(
   organizationId: string
 ): Promise<void> {
   await withPostgresTransaction(async (client) => {
-    await client.query(
-      `DELETE FROM users WHERE id = $1 AND organization_id = $2`,
-      [userId, organizationId]
-    );
+    await client.query(`DELETE FROM users WHERE id = $1 AND organization_id = $2`, [
+      userId,
+      organizationId
+    ]);
 
     const remainingUsers = await client.query(
       `SELECT 1 FROM users WHERE organization_id = $1 LIMIT 1`,
@@ -940,19 +948,9 @@ async function getScenarioContextFromPostgres(
       return null;
     }
 
-    const documentsResult = await pool.query(
-      `
-        SELECT *
-        FROM documents
-        WHERE scenario_id = $1
-        ORDER BY created_at ASC
-      `,
-      [scenarioId]
-    );
-
     return {
       scenario: mapScenarioRow(scenarioRow),
-      documents: documentsResult.rows.map(mapDocumentRow)
+      documents: await listAccessibleDocumentsFromPostgres(pool, scenarioId, organizationId)
     };
   });
 }
@@ -975,10 +973,9 @@ async function listHydratedSessionSummariesFromPostgres(
     return Promise.all(
       sessionResult.rows.map(async (row) => {
         const session = mapSessionRow(row);
-        const scenarioResult = await pool.query(
-          `SELECT * FROM scenarios WHERE id = $1 LIMIT 1`,
-          [session.scenarioId]
-        );
+        const scenarioResult = await pool.query(`SELECT * FROM scenarios WHERE id = $1 LIMIT 1`, [
+          session.scenarioId
+        ]);
         const scenarioRow = scenarioResult.rows[0];
         if (!scenarioRow) {
           return null;
@@ -995,7 +992,9 @@ async function listHydratedSessionSummariesFromPostgres(
           messages: messagesResult.rows.map(mapMessageRow)
         };
       })
-    ).then((sessions) => sessions.filter((session): session is HydratedSession => session !== null));
+    ).then((sessions) =>
+      sessions.filter((session): session is HydratedSession => session !== null)
+    );
   });
 }
 
@@ -1004,7 +1003,9 @@ async function getHydratedSessionContextFromPostgres(
   userId: string,
   organizationId: string
 ): Promise<HydratedSessionContext | null> {
-  return withPostgres(async (pool) => loadHydratedSessionContext(pool, sessionId, userId, organizationId));
+  return withPostgres(async (pool) =>
+    loadHydratedSessionContext(pool, sessionId, userId, organizationId)
+  );
 }
 
 async function createSessionWithOpeningInPostgres(
@@ -1152,25 +1153,26 @@ async function loadHydratedSessionContext(
   }
 
   const session = mapSessionRow(sessionRow);
-  const scenarioResult = await executor.query(
-    `SELECT * FROM scenarios WHERE id = $1 LIMIT 1`,
-    [session.scenarioId]
-  );
+  const scenarioResult = await executor.query(`SELECT * FROM scenarios WHERE id = $1 LIMIT 1`, [
+    session.scenarioId
+  ]);
   const scenarioRow = scenarioResult.rows[0];
   if (!scenarioRow) {
     return null;
   }
 
-  const [messagesResult, documentsResult] = await Promise.all([
-    executor.query(`SELECT * FROM messages WHERE session_id = $1 ORDER BY created_at ASC`, [sessionId]),
-    executor.query(`SELECT * FROM documents WHERE scenario_id = $1 ORDER BY created_at ASC`, [session.scenarioId])
+  const [messagesResult, documents] = await Promise.all([
+    executor.query(`SELECT * FROM messages WHERE session_id = $1 ORDER BY created_at ASC`, [
+      sessionId
+    ]),
+    listAccessibleDocumentsFromPostgres(executor, session.scenarioId, organizationId)
   ]);
 
   return {
     ...session,
     scenario: mapScenarioRow(scenarioRow),
     messages: messagesResult.rows.map(mapMessageRow),
-    documents: documentsResult.rows.map(mapDocumentRow)
+    documents
   };
 }
 
@@ -1198,15 +1200,28 @@ async function getScenarioContextWithinTransaction(
     return null;
   }
 
-  const documentsResult = await client.query(
-    `SELECT * FROM documents WHERE scenario_id = $1 ORDER BY created_at ASC`,
-    [scenarioId]
-  );
-
   return {
     scenario: mapScenarioRow(scenarioRow),
-    documents: documentsResult.rows.map(mapDocumentRow)
+    documents: await listAccessibleDocumentsFromPostgres(client, scenarioId, organizationId)
   };
+}
+
+async function listAccessibleDocumentsFromPostgres(
+  executor: { query: PgPool["query"] },
+  scenarioId: string,
+  organizationId: string
+): Promise<DocumentRecord[]> {
+  const result = await executor.query(
+    `
+      SELECT *
+      FROM documents
+      WHERE scenario_id = $1
+        AND (organization_id IS NULL OR organization_id = $2)
+      ORDER BY created_at ASC
+    `,
+    [scenarioId, organizationId]
+  );
+  return result.rows.map(mapDocumentRow);
 }
 
 function mapOrganizationJoin(row: Record<string, unknown>): OrganizationRecord {
@@ -1239,8 +1254,14 @@ function mapUserRow(row: Record<string, unknown>): UserRecord {
     transcriptConsentAt: row.transcript_consent_at ? toIsoString(row.transcript_consent_at) : null,
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
-    organizationId: String(row.organization_id)
+    organizationId: String(row.organization_id),
+    accessState: normalizeAccountAccessState(row.access_state),
+    sessionVersion: Number(row.session_version ?? 0)
   };
+}
+
+function normalizeAccountAccessState(value: unknown): AccountAccessState {
+  return value === "active" || value === "suspended" ? value : "unapproved";
 }
 
 function mapScenarioRow(row: Record<string, unknown>): ScenarioRecord {

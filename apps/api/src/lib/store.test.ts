@@ -94,7 +94,9 @@ describe("store hardening", () => {
       scenarios: [],
       sessions: [],
       messages: [],
-      documents: []
+      documents: [],
+      pilotInvitations: [],
+      pilotPasswordResets: []
     });
 
     const raw = await readFile(path.join(process.cwd(), "data", storeFileName), "utf8");

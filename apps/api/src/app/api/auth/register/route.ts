@@ -6,6 +6,8 @@ import {
   validatePassword
 } from "@/lib/auth";
 import { isNonEmptyString, jsonError, readJson } from "@/lib/http";
+import { getPilotAccessMode, normalizePilotEmail, readPilotTokenHash } from "@/lib/pilot-access";
+import { redeemPilotInvitation } from "@/lib/pilot-access-repository";
 import {
   createRateLimitResponse,
   getRequestIdentifier,
@@ -16,18 +18,21 @@ import { toAuthResponse } from "@/lib/roleplay";
 import { ensureSeedData } from "@/lib/seed";
 
 export async function POST(request: Request) {
-  const body = await readJson<RegisterRequest>(request);
+  const mode = getPilotAccessMode();
+  if (mode === "closed") return jsonError("Account enrolment is closed.", 403);
+
+  const body = await readJson<RegisterRequest | null>(request).catch(() => null);
 
   if (
+    !body ||
     !isNonEmptyString(body.name) ||
     !isNonEmptyString(body.email) ||
-    !isNonEmptyString(body.password) ||
-    !isNonEmptyString(body.organizationName)
+    !isNonEmptyString(body.password)
   ) {
-    return jsonError("Name, email, password, and organization are required.");
+    return jsonError("Name, email, and password are required.");
   }
 
-  if (!body.acceptTranscriptConsent) {
+  if (body.acceptTranscriptConsent !== true) {
     return jsonError("Transcript consent is required before a session can be recorded.");
   }
 
@@ -49,6 +54,26 @@ export async function POST(request: Request) {
     );
   }
 
+  if (mode === "invite") {
+    const email = normalizePilotEmail(body.email);
+    const tokenHash = readPilotTokenHash(body.invitationToken);
+    if (!email || !tokenHash || "organizationName" in body || "organizationId" in body || "role" in body) {
+      return jsonError("A valid invitation for this email is required.", 403);
+    }
+    if (body.name.trim().length > 120) return jsonError("Name must be at most 120 characters long.");
+
+    const user = await redeemPilotInvitation({
+      tokenHash,
+      email,
+      name: body.name,
+      createPasswordHash: () => hashPassword(body.password)
+    });
+    if (!user) return jsonError("A valid invitation for this email is required.", 403);
+
+    return createSessionResponse(user, toAuthResponse(user), 201);
+  }
+
+  if (!isNonEmptyString(body.organizationName)) return jsonError("Organization is required.");
   await ensureSeedData();
 
   const email = body.email.trim().toLowerCase();

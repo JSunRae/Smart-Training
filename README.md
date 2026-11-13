@@ -33,13 +33,14 @@ Text-first sales roleplay MVP with:
 6. Optional: set `OPENAI_TEXT_ENABLED=true` if you want model-generated buyer and coach replies.
 7. Optional: set `VOICE_LAB_ENABLED=true` if you want the `/voice-lab` realtime voice experiment.
 8. For production, set `APP_SESSION_SECRET` and `DATA_ENCRYPTION_KEY`.
+   The production API defaults to closed. Follow the [pilot access runbook](docs/PILOT_ACCESS_RUNBOOK.md) for synthetic acceptance and invitation-only customer access.
 9. If you are using Postgres, run the schema bootstrap once against the target database:
 
     ```powershell
     pnpm --filter api db:bootstrap
     ```
 
-    Smart Training does not use Prisma in the current launch path. `pnpm --filter api db:migrate` is kept only as a backward-compatible alias, and still just bootstraps missing tables and indexes. It does not apply versioned migrations.
+    The bootstrap creates missing tables and indexes and adds the pilot access columns to existing Postgres databases. `pnpm --filter api db:migrate` is an alias for this command.
 
 10. Seed the active backend once if you want the baseline scenario library:
 
@@ -78,11 +79,12 @@ For a step-by-step deployment path, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 If you need the exact hosted launch variables for `web` and `api`, use [docs/LAUNCH_ENV_MATRIX.md](docs/LAUNCH_ENV_MATRIX.md). It is the single environment reference for the first pilot.
 
-For hosted verification after deployment, start with `pnpm smoke:hosted -- --help`, then run one of these exact forms:
+For authorized hosted verification, set `SMART_TRAINING_SMOKE_EMAIL` and `SMART_TRAINING_SMOKE_INVITATION_TOKEN` for a dedicated synthetic account. Run the direct API smoke, then issue a fresh invitation and repeat through the web proxy. [Operator runbook](docs/PILOT_ACCESS_RUNBOOK.md)
 
 ```powershell
-pnpm smoke:hosted -- --api https://your-api-host
 pnpm smoke:hosted -- --api https://your-api-host --web https://your-web-host --support-email pilot-support@example.com
+# Load a fresh synthetic email and single-use invitation before this second run.
+pnpm smoke:hosted -- --api https://your-web-host --web https://your-web-host --support-email pilot-support@example.com
 ```
 
 The hosted smoke path is launch smoke, not full hosted QA. It verifies `/api/health`, optional `/privacy` retention and support-contact posture, registration, dashboard access, session start, seller turn, coach response, session completion, completed-session presence on the dashboard, account deletion, and post-delete logout behavior.
@@ -95,5 +97,7 @@ For hosted pilot operations, start with [docs/FIRST_HOSTED_PILOT_HANDOFF.md](doc
 Track the live owners, deploy ids, smoke results, rollback target, and launch evidence entries in [docs/PILOT_LAUNCH_RECORD.md](docs/PILOT_LAUNCH_RECORD.md). Each evidence row uses the same quick-fill fields: command or action, result, operator, timestamp, and notes or artifact location.
 
 ## Current status
+
+The controlled-pilot candidate supports invitation-only enrolment, support-assisted recovery and all-device sign-out. Hosted release follows the [enquiry-first decision](docs/ENQUIRY_FIRST_LAUNCH.md), the [hybrid deployment guide](docs/DEPLOYMENT_NETLIFY.md) and the [pilot launch record](docs/PILOT_LAUNCH_RECORD.md).
 
 As of July 13, 2026, the local launch candidate is anchored as `pilot-launch-2026-07-13` and passes `CI=true pnpm release:check`: typecheck, lint, 48 Vitest tests, web/API builds, Playwright E2E, and `pnpm audit --prod`; full `pnpm audit` also reports no known vulnerabilities after the dependency-audit refresh for vulnerable transitive packages. The first hosted pilot posture remains fixed: Postgres backend, 30-day transcript retention, explicit operator support contact on `/privacy`, `OPENAI_TEXT_ENABLED=false`, and `VOICE_LAB_ENABLED=false`. `OPENAI_API_KEY` remains optional and does not activate model-backed behavior unless a matching feature flag is enabled. Retrieval ingestion and usage monitoring remain post-MVP utilities: `scripts/ingest.ts` and `scripts/usage.ts` are not part of the launch gate, release checks, or hosted smoke path. Retrieval backend expansion, voice transport hardening, advanced analytics, and deeper admin workflows are intentionally deferred unless hosted pilot evidence proves they are required. The hosted pilot remains no-go until [docs/PILOT_LAUNCH_RECORD.md](docs/PILOT_LAUNCH_RECORD.md) is filled with live URLs, hosted smoke, hosted QA, support-contact, rollback, monitoring, and export evidence from the deployed environment. The current blocker summary lives in [docs/READINESS_AUDIT.md](docs/READINESS_AUDIT.md), and the short follow-up queue lives in [docs/AGENT_TASK_BOARD.md](docs/AGENT_TASK_BOARD.md).

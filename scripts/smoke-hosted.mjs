@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 const USAGE = `Hosted smoke path for a live pilot deployment.
@@ -23,6 +24,9 @@ Optional:
   --expect-voice-lab-enabled <bool>      Expected /api/health voiceLabEnabled.
                                          Defaults to SMART_TRAINING_EXPECT_VOICE_LAB_ENABLED or false.
   --help, -h                             Show this help.
+
+For a hosted API, provide an operator-issued synthetic invitation through
+SMART_TRAINING_SMOKE_EMAIL and SMART_TRAINING_SMOKE_INVITATION_TOKEN.
 
 What this verifies:
   - /api/health returns the expected launch posture
@@ -55,8 +59,6 @@ const state = {
   scenarioId: ""
 };
 
-const email = `smoke-${Date.now()}@example.com`;
-
 export async function runHostedSmoke(argv = process.argv.slice(2), env = process.env) {
   const config = resolveSmokeConfig(argv, env);
   if (config.help) {
@@ -79,15 +81,15 @@ export async function runHostedSmoke(argv = process.argv.slice(2), env = process
 
   await verifyHealth();
   await verifyPublicLaunchPosture();
-  await registerAccount();
+  await registerAccount(config.registration);
   await verifyDashboard("initial");
   await startSession();
   await sendSellerTurn();
   await requestCoach();
   await completeSession();
   await verifyDashboard("completed");
-  await deleteAccount();
-  await verifyLoggedOut();
+  const deletedAccountCookie = await deleteAccount();
+  await verifyDeletedAccountCookie(deletedAccountCookie);
   writeSuccess("Hosted smoke test passed.");
   return 0;
 }
@@ -130,8 +132,9 @@ async function verifyPublicLaunchPosture() {
   writeStep("Hosted privacy page ok");
 }
 
-async function registerAccount() {
+async function registerAccount(registration) {
   currentStep = "register";
+  const { email, invitationToken } = registration ?? { email: `smoke-${randomUUID()}@example.com` };
   const response = await request(
     "/api/auth/register",
     {
@@ -139,12 +142,14 @@ async function registerAccount() {
       body: JSON.stringify({
         email,
         name: "Hosted Smoke",
-        organizationName: "Hosted Smoke Team",
-        password: "LaunchReady2026",
+        ...(invitationToken ? { invitationToken } : { organizationName: "Hosted Smoke Team" }),
+        password: `${randomBytes(18).toString("base64url")}Aa7`,
         acceptTranscriptConsent: true
-      })
+      }),
+      redirect: "error"
     },
-    false
+    false,
+    true
   );
 
   state.cookie = readSessionCookie(response);
@@ -247,28 +252,31 @@ async function completeSession() {
 
 async function deleteAccount() {
   currentStep = "account:delete";
+  const previousCookie = state.cookie;
   await request("/api/auth/account", { method: "DELETE" });
   state.cookie = "";
   writeStep("Account deletion ok");
+  return previousCookie;
 }
 
-async function verifyLoggedOut() {
+async function verifyDeletedAccountCookie(previousCookie) {
   currentStep = "auth:post-delete";
   const response = await fetch(`${apiOrigin}/api/dashboard`, {
     headers: {
-      Accept: "application/json"
+      Accept: "application/json",
+      Cookie: previousCookie
     }
   });
   const body = await readJson(response);
 
   if (response.status !== 401 || body.error !== "Not authenticated.") {
-    throw new Error("Post-delete dashboard check did not return 401.");
+    throw new Error("Dashboard did not reject the deleted account's session cookie with 401.");
   }
 
-  writeStep("Post-delete auth check ok");
+  writeStep("Deleted account's session cookie rejected");
 }
 
-async function request(pathname, init, requireSession = true) {
+async function request(pathname, init, requireSession = true, redactError = false) {
   const headers = new Headers(init.headers || {});
   headers.set("Accept", "application/json");
   if (init.body && !headers.has("Content-Type")) {
@@ -283,6 +291,9 @@ async function request(pathname, init, requireSession = true) {
     headers
   });
 
+  if (redactError && !response.ok) {
+    throw new Error(`${pathname} failed with ${response.status}. Check the synthetic account and its invitation.`);
+  }
   await assertOkJsonResponse(response, pathname);
   return response;
 }
@@ -396,7 +407,7 @@ export function resolveSmokeConfig(argv, env = process.env) {
     return { help: true };
   }
 
-  return {
+  const config = {
     apiOrigin: normalizeOrigin(
       cli.api || readRequiredEnv("SMART_TRAINING_API_ORIGIN", env),
       "--api / SMART_TRAINING_API_ORIGIN"
@@ -425,11 +436,26 @@ export function resolveSmokeConfig(argv, env = process.env) {
       "--web / SMART_TRAINING_WEB_ORIGIN"
     )
   };
+  const origin = new URL(config.apiOrigin);
+  const loopback = ["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname);
+  const email = readOptionalEnv("SMART_TRAINING_SMOKE_EMAIL", env).toLowerCase();
+  const invitationToken = readOptionalEnv("SMART_TRAINING_SMOKE_INVITATION_TOKEN", env);
+  if (email || invitationToken || !loopback) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || !/^[A-Za-z0-9_-]{43}$/.test(invitationToken)) {
+      throw new UsageError("Provide a synthetic email and invitation via SMART_TRAINING_SMOKE_EMAIL and SMART_TRAINING_SMOKE_INVITATION_TOKEN.");
+    }
+    if (!loopback && origin.protocol !== "https:") {
+      throw new UsageError("An HTTPS API origin is required for a hosted smoke invitation.");
+    }
+    return { ...config, registration: { email, invitationToken } };
+  }
+  return config;
 }
 
 export function normalizeOrigin(value, sourceLabel) {
   try {
     const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Expected HTTP or HTTPS.");
     return url.origin;
   } catch {
     throw new UsageError(`${sourceLabel} must be an absolute URL. Received: ${value}`);

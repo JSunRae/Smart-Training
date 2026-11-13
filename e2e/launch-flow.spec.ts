@@ -10,6 +10,9 @@ test("user can complete the publish-path roleplay flow", async ({ page }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("LaunchReady2026");
   await expect(page.getByRole("link", { name: "Review privacy and retention" })).toBeVisible();
+  const consent = page.getByRole("checkbox", { name: /I consent to transcript storage/ });
+  await expect(consent).not.toBeChecked();
+  await consent.check();
   await page.locator("form").getByRole("button", { name: "Create workspace" }).click();
 
   await expect(
@@ -61,6 +64,7 @@ test("seller turn submit is single-flight and preserves draft for retry after a 
   await page.getByLabel("Organization").fill("Publish Ready Team");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("LaunchReady2026");
+  await page.getByRole("checkbox", { name: /I consent to transcript storage/ }).check();
   await page.locator("form").getByRole("button", { name: "Create workspace" }).click();
 
   await expect(

@@ -1,0 +1,7 @@
+.print {
+  border-bottom: 1px solid #ccd2cb;
+  color: #172128;
+  cursor: pointer;
+  padding-block: 13px;
+  font-size: 13px;
+}

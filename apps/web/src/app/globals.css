@@ -68,6 +68,13 @@ svg {
   background: rgba(218, 91, 46, 0.22);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body {
+    scroll-behavior: auto;
+  }
+}
+
 main {
   width: 100%;
 }

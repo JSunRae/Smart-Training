@@ -64,14 +64,14 @@ describe("roleplay API flow", () => {
 
     expect(registered.body.user.role).toBe("ADMIN");
 
-    const logoutResponse = await logout();
+    const logoutResponse = await logout(createRequest("/api/auth/logout", "POST", undefined, registered.cookie));
     expect(logoutResponse.status).toBe(200);
+    expect((await dashboard(createRequest("/api/dashboard", "GET", undefined, registered.cookie))).status).toBe(401);
 
     const loginResponse = await login(
       createRequest("/api/auth/login", "POST", {
         email: "alex@example.com",
-        password: "LaunchReady2026",
-        acceptTranscriptConsent: true
+        password: "LaunchReady2026"
       })
     );
 
@@ -84,6 +84,151 @@ describe("roleplay API flow", () => {
     expect(dashboardBody.user.organization.name).toBe("Northwind Labs");
     expect(dashboardBody.scenarios.length).toBeGreaterThanOrEqual(3);
     expect(dashboardBody.sessions).toHaveLength(0);
+  });
+
+  it.each([undefined, false, "false"])("requires explicit transcript consent at registration (%j)", async (consent) => {
+    const response = await register(
+      createRequest("/api/auth/register", "POST", {
+        email: "consent@example.com",
+        name: "Consent Tester",
+        organizationName: "Consent Workspace",
+        password: "LaunchReady2026",
+        acceptTranscriptConsent: consent
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.has("set-cookie")).toBe(false);
+  });
+
+  it("requires explicit transcript consent before signing in an account without it", async () => {
+    const credentials = {
+      email: "legacy-consent@example.com",
+      password: "LaunchReady2026"
+    };
+    await registerUser({
+      email: credentials.email,
+      name: "Legacy Tester",
+      organizationName: "Consent Workspace"
+    });
+    const database = await readDatabase();
+    database.users[0]!.transcriptConsentAt = null;
+    await resetDatabase(database);
+
+    const rejected = await login(
+      createRequest("/api/auth/login", "POST", { ...credentials, acceptTranscriptConsent: "false" })
+    );
+    expect(rejected.status).toBe(400);
+    expect(rejected.headers.has("set-cookie")).toBe(false);
+
+    const accepted = await login(
+      createRequest("/api/auth/login", "POST", { ...credentials, acceptTranscriptConsent: true })
+    );
+    expect(accepted.status).toBe(200);
+    expect((await readJson<AuthResponse>(accepted)).user.transcriptConsentAt).toBeTruthy();
+  });
+
+  it("scopes shared-scenario documents to the session organization throughout the route lifecycle", async () => {
+    const firstUser = await registerUser({
+      email: "scope-a@example.com",
+      name: "Scope Seller A",
+      organizationName: "Scope Organization A"
+    });
+    const secondUser = await registerUser({
+      email: "scope-b@example.com",
+      name: "Scope Seller B",
+      organizationName: "Scope Organization B"
+    });
+    const firstDashboard = await readJson<DashboardResponse>(
+      await dashboard(createRequest("/api/dashboard", "GET", undefined, firstUser.cookie))
+    );
+    const scenarioId = firstDashboard.scenarios[0]!.id;
+    const globalContent = "ScopeFixture guidance shared across organizations.";
+    const firstContent = "ScopeFixture private guidance for organization A.";
+    const secondContent = "ScopeFixture private guidance for organization B.";
+    const documents = [
+      { organizationId: null, content: globalContent },
+      { organizationId: firstUser.body.user.organization.id, content: firstContent },
+      { organizationId: secondUser.body.user.organization.id, content: secondContent }
+    ];
+    const timestamp = new Date().toISOString();
+
+    const database = await readDatabase();
+    const scenario = database.scenarios.find((entry) => entry.id === scenarioId)!;
+    expect(scenario.organizationId).toBeNull();
+    scenario.title = "ScopeFixture";
+    scenario.challenge = "ScopeFixture";
+    database.documents.push(
+      ...documents.map((document, index) => ({
+        id: `scope-document-${index}`,
+        title: "ScopeFixture ScopeFixture ScopeFixture",
+        type: "NOTE" as const,
+        content: document.content,
+        summary: null,
+        sourceUrl: null,
+        organizationId: document.organizationId,
+        scenarioId,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }))
+    );
+    await resetDatabase(database);
+
+    for (const { account, ownContent, foreignContent } of [
+      { account: firstUser, ownContent: firstContent, foreignContent: secondContent },
+      { account: secondUser, ownContent: secondContent, foreignContent: firstContent }
+    ]) {
+      const assertScopedResponse = async (response: Response, status = 200) => {
+        expect(response.status).toBe(status);
+        const body = await readJson<SessionResponse>(response);
+        expect(body.session.contextSnippets).toEqual(
+          expect.arrayContaining([globalContent, ownContent])
+        );
+        expect(JSON.stringify(body)).not.toContain(foreignContent);
+        return body.session;
+      };
+      const started = await assertScopedResponse(
+        await start(createRequest("/api/sessions/start", "POST", { scenarioId }, account.cookie)),
+        201
+      );
+      const pathname = `/api/sessions/${started.id}`;
+      await assertScopedResponse(
+        await getSession(
+          createRequest(pathname, "GET", undefined, account.cookie),
+          sessionContext(started.id)
+        )
+      );
+      await assertScopedResponse(
+        await message(
+          createRequest(
+            `${pathname}/message`,
+            "POST",
+            { content: "ScopeFixture practice" },
+            account.cookie
+          ),
+          sessionContext(started.id)
+        )
+      );
+      await assertScopedResponse(
+        await coach(
+          createRequest(`${pathname}/coach`, "POST", undefined, account.cookie),
+          sessionContext(started.id)
+        )
+      );
+      const completed = await assertScopedResponse(
+        await complete(
+          createRequest(`${pathname}/complete`, "POST", undefined, account.cookie),
+          sessionContext(started.id)
+        )
+      );
+      expect(completed.status).toBe("COMPLETED");
+      await assertScopedResponse(
+        await getSession(
+          createRequest(pathname, "GET", undefined, account.cookie),
+          sessionContext(started.id)
+        )
+      );
+    }
   });
 
   it("supports the full session lifecycle", async () => {

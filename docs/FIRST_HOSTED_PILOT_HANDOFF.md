@@ -1,6 +1,10 @@
 # First Hosted Pilot Handoff
 
-Start here for the first hosted pilot launch. This is the shortest supported path for the current text-first MVP on Render. Use this document for execution, then use the linked source docs when you need deeper detail.
+Last updated: 2026-11-13
+
+Current decision: hosted provisioning is deferred until an interested client needs independent trial access. Use [ENQUIRY_FIRST_LAUNCH.md](ENQUIRY_FIRST_LAUNCH.md) now; this handoff applies only after a later rollout approval.
+
+Start here for the first hosted pilot launch. The selected topology is a Netlify frontend with a Render API and PostgreSQL backend. The root Render Blueprint remains an all-Render alternative; do not apply both topologies.
 
 For live rollout execution, keep [HOSTED_LAUNCH_WORKSHEET.md](./HOSTED_LAUNCH_WORKSHEET.md) open beside this handoff and fill [PILOT_LAUNCH_RECORD.md](./PILOT_LAUNCH_RECORD.md) as each step completes.
 
@@ -11,16 +15,17 @@ Primary references:
 - [Pilot launch record](./PILOT_LAUNCH_RECORD.md)
 - [Hosted QA checklist](./HOSTED_QA_CHECKLIST.md)
 - [Deployment guide](./DEPLOYMENT.md)
+- [Netlify frontend and hybrid deployment guide](./DEPLOYMENT_NETLIFY.md)
 - [Render deployment guide](./DEPLOYMENT_RENDER.md)
 - [Repo README](../README.md)
 
 ## Prerequisites
 
 - Node.js 22.x and pnpm 9.x on the operator machine
-- Render access to the target workspace, with the workspace upgraded to `Pro` before provisioning
+- Render access to the selected `Hobby` workspace; do not upgrade or provision paid compute without a later spending approval
 - Repo access to the exact revision you intend to launch
-- A live operator support inbox to use for `NEXT_PUBLIC_SUPPORT_EMAIL`
-- A named owner for deploy approval, rollback, privacy/deletion requests, secrets rotation, and database restore
+- Approved pilot support contact: `Jason_C_Rae@Outlook.com` for `NEXT_PUBLIC_SUPPORT_EMAIL`; keep it for this pilot unless a new contact change is approved. The `training@jasonrae.ai` marketing website alias has a separate conditional publication gate.
+- A named owner for deploy approval, rollback, support inbox monitoring, privacy/deletion requests, secrets rotation, and database restore
 - The launch record ready to fill in at [PILOT_LAUNCH_RECORD.md](./PILOT_LAUNCH_RECORD.md)
 
 ## Required live environment input
@@ -29,14 +34,14 @@ Do not invent these values. Fill them with live pilot values during launch.
 
 | Key / item | Where it comes from | Notes |
 | --- | --- | --- |
-| `NEXT_PUBLIC_SUPPORT_EMAIL` | Operator input during Render Blueprint creation | Required. Must be the support contact shown on `/privacy`. |
+| `NEXT_PUBLIC_SUPPORT_EMAIL` | Approved pilot contact: `Jason_C_Rae@Outlook.com` | Required. Verify the deployed application `/privacy` page displays this exact contact. The website alias is a separate release. |
 | Git revision / release tag | Operator input | Record the exact launched revision in the launch record. |
-| Web URL | Render after provisioning | Record in the launch record. |
-| API URL | Render after provisioning | Record in the launch record. |
-| Last known-good web deploy id | Render after provisioning | Record before opening pilot access. |
+| Web URL | Approved Netlify pilot target after deployment | Record the actual origin in the launch record. Keep the existing marketing deployment unchanged until pilot promotion is separately approved. |
+| API URL | Render after backend deployment | Record in the launch record. |
+| Last known-good web deploy id | Netlify approved pilot target after deployment | Record before opening pilot access. |
 | Last known-good API deploy id | Render after provisioning | Record before opening pilot access. |
 
-Expected runtime posture from the current Blueprint in [render.yaml](../render.yaml):
+Expected backend posture from [the backend-only Render Blueprint](../deploy/render-backend.yaml):
 
 - `NODE_ENV=production`
 - `DATABASE_URL` from Render Postgres
@@ -45,8 +50,14 @@ Expected runtime posture from the current Blueprint in [render.yaml](../render.y
 - `SESSION_RETENTION_DAYS=30`
 - `OPENAI_TEXT_ENABLED=false`
 - `VOICE_LAB_ENABLED=false`
-- `INTERNAL_API_HOSTPORT` wired from the API service to the web service
-- `NEXT_PUBLIC_SUPPORT_NAME=Smart Training Pilot Support`
+- `PILOT_ACCESS_MODE` unset/closed until a separately authorized synthetic acceptance window; set to `invite` only for that window or an approved pilot
+
+Netlify pilot frontend posture:
+
+- Use the approved Netlify pilot target and actual public HTTPS `INTERNAL_API_ORIGIN` for build and function runtime where selectable.
+- Clear `INTERNAL_API_HOSTPORT` and `NEXT_PUBLIC_API_ORIGIN` on Netlify. Netlify cannot reach Render's private hostport.
+- The frontend mode is build-time. Keep ordinary previews and the existing conversion site in `marketing` mode; use `pilot` only on the approved pilot target.
+- Use `NEXT_PUBLIC_SUPPORT_EMAIL=Jason_C_Rae@Outlook.com` for this pilot unless the contact is explicitly changed through its own approved release.
 
 Deploy hook posture from the current Blueprint:
 
@@ -64,21 +75,28 @@ pnpm install --frozen-lockfile
 pnpm release:check
 ```
 
-Then complete the Render steps:
+Before any hosted deployment, confirm the interested-trial scope and obtain approval for the current provider estimate and exact deployment target. The previously selected Render Hobby workspace does not waive API/Postgres charges. Complete the exact committed-candidate release gate and real disposable-Postgres migration/concurrency checks first.
 
-1. Push the exact approved revision.
-2. In Render, create or sync the Blueprint from `render.yaml`.
-3. Confirm it provisions `smart-training-db`, `smart-training-api`, and `smart-training-web`.
-4. When prompted, enter the live `NEXT_PUBLIC_SUPPORT_EMAIL` value.
-5. Wait for all three resources to finish provisioning.
-6. Open `GET /api/health` and confirm `status=ok`, `storageBackend=postgres`, `openAiTextEnabled=false`, and `voiceLabEnabled=false`.
-7. Copy the live web URL, API URL, and current deploy ids into [PILOT_LAUNCH_RECORD.md](./PILOT_LAUNCH_RECORD.md).
+Then complete the hybrid deployment steps:
 
-Then run hosted verification:
+1. Push the exact approved committed revision.
+2. In Render, create or sync only the backend Blueprint from [deploy/render-backend.yaml](../deploy/render-backend.yaml). Root `render.yaml` creates an additional Render web service and is the all-Render alternative.
+3. Confirm it provisions only `smart-training-db` and `smart-training-api`. The API pre-deploy hook runs `pnpm --filter api db:bootstrap && pnpm seed`; record its result. Do not repeat bootstrap/seed manually after a successful hook unless the database is new/reset or an explicit workstation preflight is needed.
+4. Wait for Postgres and API deployment to complete. Check `/api/health` for `status=ok`, `storageBackend=postgres`, `openAiTextEnabled=false`, and `voiceLabEnabled=false`. This health check does not prove schema bootstrap or seed completion.
+5. Keep API access closed until the hosted synthetic acceptance scope is authorized. During that scoped window, set API `PILOT_ACCESS_MODE=invite` and issue only the separately scoped synthetic invitations needed for the checks. Restore `closed` after synthetic acceptance and keep it closed until the final go decision. Do not create or deliver customer invitations before that decision.
+6. Configure the approved Netlify pilot target with the actual public HTTPS Render API origin, clear Render-only hostport and public API fallback variables, and build the frontend in `pilot` mode. Do not change the existing marketing production target as a diagnostic step.
+7. Copy the actual Netlify web URL, Render API URL, and deploy ids into [PILOT_LAUNCH_RECORD.md](./PILOT_LAUNCH_RECORD.md).
+
+Then set `SMART_TRAINING_SMOKE_EMAIL` and `SMART_TRAINING_SMOKE_INVITATION_TOKEN` in the smoke process environment. Keep the token out of command lines, files, and logs; use the hidden token-entry example in [PILOT_LAUNCH_RUNBOOK.md](PILOT_LAUNCH_RUNBOOK.md). Each grant is one-use, and each smoke run deletes its synthetic account. Issue a fresh synthetic grant before each run. First test the API directly; then test the same-origin proxy by targeting the web origin for `--api`:
 
 ```powershell
-pnpm smoke:hosted -- --api <API_URL> --web <WEB_URL> --support-email <NEXT_PUBLIC_SUPPORT_EMAIL>
+$apiUrl = Read-Host 'Enter the approved Render API origin'
+$webUrl = Read-Host 'Enter the approved Netlify pilot web origin'
+pnpm smoke:hosted -- --api $apiUrl --web $webUrl --support-email Jason_C_Rae@Outlook.com
+pnpm smoke:hosted -- --api $webUrl --web $webUrl --support-email Jason_C_Rae@Outlook.com
 ```
+
+The first run exercises API origin requests and checks web `/privacy`. The second run sends health, registration, roleplay and deletion requests through the Netlify proxy. Supplying `--web` does not itself route those requests through the web service.
 
 Then finish the operator checks:
 
@@ -96,11 +114,16 @@ Capture these in [PILOT_LAUNCH_RECORD.md](./PILOT_LAUNCH_RECORD.md):
 - Hosted QA checklist result
 - Hosted demo rehearsal result if performed
 - Confirmation that `/privacy` shows the live operator support contact
+- Physical iPhone Safari device model, iOS version, full journey outcome, and any blocking issue
 - Live URLs, deploy ids, rollback targets, and recovery owner
+
+Use an actual iPhone in Safari, not desktop emulation. Follow the coverage in [TESTING_AND_IPHONE_GUIDE_2026-09-19.md](TESTING_AND_IPHONE_GUIDE_2026-09-19.md) and record the device model and iOS version with the Hosted QA evidence.
+
+Use [PILOT_LAUNCH_RECORD.md](./PILOT_LAUNCH_RECORD.md) as the single source of launch evidence. Before external access opens, confirm the named support operator can access and monitor the approved inbox, complete recovery/privacy requests, and deliver any separately authorized credential through a verified channel. A historic notification receipt is not current monitoring evidence.
 
 ## Rollback trigger
 
-Pause pilot access and roll back the failing Render service to the last known-good deploy id if either of these happens after deployment:
+Pause pilot access and roll back the failing Render API or approved Netlify pilot frontend to the recorded known-good deploy if either of these happens after deployment:
 
 - `pnpm smoke:hosted` fails
 - The hosted QA checklist fails
@@ -112,7 +135,7 @@ Escalate from service rollback to database restore only for confirmed data loss,
 The first hosted pilot launch is done only when all of the following are true:
 
 - `pnpm release:check` passed on the launched revision
-- Render provisioned the Postgres, API, and web services successfully
+- Render provisioned the Postgres and API successfully and the approved Netlify pilot frontend deployed successfully
 - `GET /api/health` shows Postgres-backed, text-disabled, voice-disabled posture
 - `pnpm smoke:hosted` passed against the live API and web URLs
 - [HOSTED_QA_CHECKLIST.md](./HOSTED_QA_CHECKLIST.md) passed cleanly

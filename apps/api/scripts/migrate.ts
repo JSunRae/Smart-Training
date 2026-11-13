@@ -1,14 +1,18 @@
 import { getStorageBackend } from "../src/lib/database-config";
-import { ensurePostgresSchemaReady } from "../src/lib/postgres";
+import { ensurePostgresSchemaReady, resetPostgresRuntime } from "../src/lib/postgres";
 import { readDatabase } from "../src/lib/store";
 
 async function main() {
   const backend = getStorageBackend();
 
   if (backend === "postgres") {
-    await ensurePostgresSchemaReady();
+    try {
+      await ensurePostgresSchemaReady();
+    } finally {
+      await resetPostgresRuntime();
+    }
     console.log(
-      "Postgres schema bootstrap completed. Existing tables and indexes were left in place; no versioned migrations were applied."
+      "Postgres schema bootstrap completed, including additive pilot access columns and credential tables."
     );
     return;
   }
@@ -19,5 +23,5 @@ async function main() {
 
 main().catch((error) => {
   console.error(error);
-  process.exit(1);
+  process.exitCode = 1;
 });

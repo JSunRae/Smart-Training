@@ -20,6 +20,7 @@ import { POST as complete } from "./sessions/[sessionId]/complete/route";
 import { POST as message } from "./sessions/[sessionId]/message/route";
 import { GET as listSessions } from "./sessions/route";
 import { POST as start } from "./sessions/start/route";
+import { encryptString } from "@/lib/data-protection";
 import { resetPostgresRuntime, withPostgres } from "@/lib/postgres";
 import { getAccountByEmail } from "@/lib/repository";
 
@@ -52,8 +53,9 @@ describe("roleplay API flow (postgres backend)", () => {
 
     expect(registered.body.user.role).toBe("ADMIN");
 
-    const logoutResponse = await logout();
+    const logoutResponse = await logout(createRequest("/api/auth/logout", "POST", undefined, registered.cookie));
     expect(logoutResponse.status).toBe(200);
+    expect((await dashboard(createRequest("/api/dashboard", "GET", undefined, registered.cookie))).status).toBe(401);
 
     const loginResponse = await login(
       createRequest("/api/auth/login", "POST", {
@@ -77,6 +79,118 @@ describe("roleplay API flow (postgres backend)", () => {
 
     const storedAccount = await getAccountByEmail("alex@example.com");
     expect(storedAccount?.user.email).toBe("alex@example.com");
+  });
+
+  it("scopes shared-scenario documents to the session organization throughout the route lifecycle", async () => {
+    const firstUser = await registerUser({
+      email: "scope-a@example.com",
+      name: "Scope Seller A",
+      organizationName: "Scope Organization A"
+    });
+    const secondUser = await registerUser({
+      email: "scope-b@example.com",
+      name: "Scope Seller B",
+      organizationName: "Scope Organization B"
+    });
+    const firstDashboard = await readJson<DashboardResponse>(
+      await dashboard(createRequest("/api/dashboard", "GET", undefined, firstUser.cookie))
+    );
+    const scenarioId = firstDashboard.scenarios[0]!.id;
+    const globalContent = "ScopeFixture guidance shared across organizations.";
+    const firstContent = "ScopeFixture private guidance for organization A.";
+    const secondContent = "ScopeFixture private guidance for organization B.";
+    const documents = [
+      { organizationId: null, content: globalContent },
+      { organizationId: firstUser.body.user.organization.id, content: firstContent },
+      { organizationId: secondUser.body.user.organization.id, content: secondContent }
+    ];
+    const timestamp = new Date().toISOString();
+
+    await withPostgres(async (pool) => {
+      const scenario = await pool.query(`SELECT organization_id FROM scenarios WHERE id = $1`, [
+        scenarioId
+      ]);
+      expect(scenario.rows[0].organization_id).toBeNull();
+      await pool.query(`UPDATE scenarios SET title = $2, challenge = $2 WHERE id = $1`, [
+        scenarioId,
+        "ScopeFixture"
+      ]);
+      for (const [index, document] of documents.entries()) {
+        await pool.query(
+          `
+            INSERT INTO documents (
+              id, title, type, content, summary, source_url,
+              organization_id, scenario_id, created_at, updated_at
+            )
+            VALUES ($1, $2, 'NOTE', $3, NULL, NULL, $4, $5, $6, $6)
+          `,
+          [
+            `scope-document-${index}`,
+            encryptString("ScopeFixture ScopeFixture ScopeFixture"),
+            encryptString(document.content),
+            document.organizationId,
+            scenarioId,
+            timestamp
+          ]
+        );
+      }
+    });
+
+    for (const { account, ownContent, foreignContent } of [
+      { account: firstUser, ownContent: firstContent, foreignContent: secondContent },
+      { account: secondUser, ownContent: secondContent, foreignContent: firstContent }
+    ]) {
+      const assertScopedResponse = async (response: Response, status = 200) => {
+        expect(response.status).toBe(status);
+        const body = await readJson<SessionResponse>(response);
+        expect(body.session.contextSnippets).toEqual(
+          expect.arrayContaining([globalContent, ownContent])
+        );
+        expect(JSON.stringify(body)).not.toContain(foreignContent);
+        return body.session;
+      };
+      const started = await assertScopedResponse(
+        await start(createRequest("/api/sessions/start", "POST", { scenarioId }, account.cookie)),
+        201
+      );
+      const pathname = `/api/sessions/${started.id}`;
+      await assertScopedResponse(
+        await getSession(
+          createRequest(pathname, "GET", undefined, account.cookie),
+          sessionContext(started.id)
+        )
+      );
+      await assertScopedResponse(
+        await message(
+          createRequest(
+            `${pathname}/message`,
+            "POST",
+            { content: "ScopeFixture practice" },
+            account.cookie
+          ),
+          sessionContext(started.id)
+        )
+      );
+      await assertScopedResponse(
+        await coach(
+          createRequest(`${pathname}/coach`, "POST", undefined, account.cookie),
+          sessionContext(started.id)
+        )
+      );
+      const completed = await assertScopedResponse(
+        await complete(
+          createRequest(`${pathname}/complete`, "POST", undefined, account.cookie),
+          sessionContext(started.id)
+        )
+      );
+      expect(completed.status).toBe("COMPLETED");
+      await assertScopedResponse(
+        await getSession(
+          createRequest(pathname, "GET", undefined, account.cookie),
+          sessionContext(started.id)
+        )
+      );
+    }
   });
 
   it("supports the full session lifecycle", async () => {

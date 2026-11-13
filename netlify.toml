@@ -1,0 +1,30 @@
+# NEW Smart Training project only. Never link this repo to jasonrae-ai.
+# Base directory: repository root. Package directory in UI: apps/web.
+[build]
+  command = "pnpm build:web"
+  publish = "apps/web/.next"
+
+[build.environment]
+  NODE_VERSION = "22.18.0"
+  PNPM_VERSION = "9.12.0"
+  NEXT_TELEMETRY_DISABLED = "1"
+  SMART_TRAINING_SITE_MODE = "marketing"
+  NEXT_PUBLIC_SUPPORT_NAME = "Smart Training Pilot Support"
+  NEXT_PUBLIC_SUPPORT_EMAIL = "Jason_C_Rae@Outlook.com"
+
+# Keep ordinary previews away from a production backend.
+[context.deploy-preview.environment]
+  SMART_TRAINING_SITE_MODE = "marketing"
+
+[context.branch-deploy.environment]
+  SMART_TRAINING_SITE_MODE = "marketing"
+
+[dev]
+  command = "pnpm dev:web"
+  targetPort = 3000
+  port = 8889
+  framework = "#custom"
+
+# Netlify auto-installs its current Next.js adapter. No SPA fallback or custom
+# /api redirect belongs here: the Next.js config owns the same-origin proxy.
+# See docs/DEPLOYMENT_NETLIFY.md before changing the production mode to pilot.

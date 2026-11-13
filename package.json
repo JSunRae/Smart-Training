@@ -28,6 +28,8 @@
     "node": ">=22.18.0 <23"
   },
   "scripts": {
+    "demo:local": "node scripts/demo-local.mjs",
+    "demo:check": "node scripts/demo-local-qa.mjs",
     "dev:web": "pnpm --filter web dev",
     "dev:api": "pnpm --filter api dev",
     "build:web": "pnpm --filter web build",

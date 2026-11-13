@@ -4,6 +4,8 @@ import path from "node:path";
 
 import type { MessageRole, SessionStatus, UserRole } from "@core/contracts";
 
+export type AccountAccessState = "unapproved" | "active" | "suspended";
+
 import {
   decryptNullableString,
   decryptString,
@@ -31,6 +33,8 @@ export type UserRecord = {
   createdAt: string;
   updatedAt: string;
   organizationId: string;
+  accessState?: AccountAccessState;
+  sessionVersion?: number;
 };
 
 export type ScenarioRecord = {
@@ -92,6 +96,23 @@ export type Database = {
   sessions: SessionRecord[];
   messages: MessageRecord[];
   documents: DocumentRecord[];
+  pilotInvitations?: PilotInvitationRecord[];
+  pilotPasswordResets?: PilotPasswordResetRecord[];
+};
+
+export type PilotInvitationRecord = {
+  tokenHash: string;
+  emailLookupHash: string;
+  organizationId: string;
+  role: "ADMIN" | "SELLER";
+  expiresAt: string;
+};
+
+export type PilotPasswordResetRecord = {
+  tokenHash: string;
+  userId: string;
+  organizationId: string;
+  expiresAt: string;
 };
 
 const EMPTY_DATABASE: Database = {
@@ -100,12 +121,18 @@ const EMPTY_DATABASE: Database = {
   scenarios: [],
   sessions: [],
   messages: [],
-  documents: []
+  documents: [],
+  pilotInvitations: [],
+  pilotPasswordResets: []
 };
 
-let writeQueue = Promise.resolve();
+let operationQueue = Promise.resolve();
 
-export async function readDatabase(): Promise<Database> {
+export function readDatabase(): Promise<Database> {
+  return queueDatabaseOperation(readDatabaseSnapshot);
+}
+
+async function readDatabaseSnapshot(): Promise<Database> {
   const filePath = resolveFileStorePath();
   await mkdir(path.dirname(filePath), { recursive: true });
 
@@ -135,15 +162,18 @@ export async function readDatabase(): Promise<Database> {
 export async function updateDatabase<T>(
   mutator: (database: Database) => Promise<T> | T
 ): Promise<T> {
-  const run = writeQueue.then(async () => {
-    const database = await readDatabase();
+  return queueDatabaseOperation(async () => {
+    const database = await readDatabaseSnapshot();
     const result = await mutator(database);
     const retained = applyRetentionPolicy(database);
     await writeDatabaseFile(resolveFileStorePath(), retained.database);
     return result;
   });
+}
 
-  writeQueue = run.then(
+function queueDatabaseOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const run = operationQueue.then(operation);
+  operationQueue = run.then(
     () => undefined,
     () => undefined
   );
@@ -152,9 +182,12 @@ export async function updateDatabase<T>(
 }
 
 export async function resetDatabase(nextDatabase?: Database): Promise<void> {
-  const database = nextDatabase ?? structuredClone(EMPTY_DATABASE);
-  await mkdir(path.dirname(resolveFileStorePath()), { recursive: true });
-  await writeDatabaseFile(resolveFileStorePath(), database);
+  await queueDatabaseOperation(async () => {
+    const filePath = resolveFileStorePath();
+    const database = nextDatabase ?? structuredClone(EMPTY_DATABASE);
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeDatabaseFile(filePath, database);
+  });
 }
 
 export function createId(): string {
@@ -173,6 +206,8 @@ function serializeDatabase(database: Database): string {
     })),
     users: database.users.map((user) => ({
       ...user,
+      accessState: user.accessState ?? "unapproved",
+      sessionVersion: user.sessionVersion ?? 0,
       email: encryptString(user.email),
       name: encryptString(user.name),
       passwordHash: encryptString(user.passwordHash)
@@ -189,7 +224,9 @@ function serializeDatabase(database: Database): string {
       content: encryptNullableString(document.content),
       summary: encryptNullableString(document.summary),
       sourceUrl: encryptNullableString(document.sourceUrl)
-    }))
+    })),
+    pilotInvitations: database.pilotInvitations ?? [],
+    pilotPasswordResets: database.pilotPasswordResets ?? []
   };
 
   return JSON.stringify(persisted, null, 2);
@@ -211,6 +248,8 @@ function deserializeDatabase(raw: string): Database {
     })),
     users: persisted.users.map((user) => ({
       ...user,
+      accessState: user.accessState ?? "unapproved",
+      sessionVersion: user.sessionVersion ?? 0,
       email: decryptString(user.email),
       name: decryptString(user.name),
       passwordHash: decryptString(user.passwordHash)
@@ -227,7 +266,9 @@ function deserializeDatabase(raw: string): Database {
       content: decryptNullableString(document.content),
       summary: decryptNullableString(document.summary),
       sourceUrl: decryptNullableString(document.sourceUrl)
-    }))
+    })),
+    pilotInvitations: persisted.pilotInvitations ?? [],
+    pilotPasswordResets: persisted.pilotPasswordResets ?? []
   };
 }
 

@@ -79,7 +79,8 @@ export type RegisterRequest = {
   name: string;
   email: string;
   password: string;
-  organizationName: string;
+  organizationName?: string;
+  invitationToken?: string;
   acceptTranscriptConsent: boolean;
 };
 
@@ -87,6 +88,11 @@ export type LoginRequest = {
   email: string;
   password: string;
   acceptTranscriptConsent?: boolean;
+};
+
+export type ResetPasswordRequest = {
+  resetToken: string;
+  password: string;
 };
 
 export type StartSessionRequest = {

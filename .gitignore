@@ -3,6 +3,7 @@ node_modules/
 dist/
 coverage/
 .turbo/
+.netlify/
 test-results/
 *.log
 **/*.tsbuildinfo

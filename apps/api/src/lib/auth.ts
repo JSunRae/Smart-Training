@@ -3,8 +3,9 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { NextResponse } from "next/server";
 
 import { getRequiredSessionSecret } from "./env";
+import { canUseAccountInMode, getPilotAccessMode } from "./pilot-access";
 import { getSessionUserById } from "./repository";
-import type { UserRecord } from "./store";
+import type { AccountAccessState, UserRecord } from "./store";
 
 const COOKIE_NAME = "smart_training_session";
 const DEFAULT_SECRET = "smart-training-dev-secret";
@@ -13,8 +14,8 @@ const SESSION_TTL_DAYS = 30;
 type SessionPayload = {
   userId: string;
   organizationId: string;
-  role: "ADMIN" | "TRAINER" | "SELLER";
-  expiresAt: string;
+  sessionVersion: number;
+  expiresAt: number;
 };
 
 export type SessionUser = {
@@ -23,6 +24,8 @@ export type SessionUser = {
   name: UserRecord["name"];
   organizationId: UserRecord["organizationId"];
   role: UserRecord["role"];
+  accessState: AccountAccessState;
+  sessionVersion: number;
   transcriptConsentAt: Date | null;
   organization: {
     id: string;
@@ -56,6 +59,9 @@ export function verifyPassword(password: string, storedHash: string): boolean {
 export function validatePassword(password: string): string | null {
   if (password.length < 10) {
     return "Password must be at least 10 characters long.";
+  }
+  if (password.length > 128) {
+    return "Password must be at most 128 characters long.";
   }
 
   if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
@@ -96,44 +102,59 @@ export function createLogoutResponse() {
 }
 
 export async function requireSessionUser(request: Request): Promise<SessionUser | null> {
+  const mode = getPilotAccessMode();
+  if (mode === "closed") return null;
+
   const payload = readSessionPayload(request);
   if (!payload) {
     return null;
   }
 
-  return getSessionUserById(payload.userId, payload.organizationId);
+  const user = await getSessionUserById(payload.userId, payload.organizationId);
+  if (!user || user.sessionVersion !== payload.sessionVersion || !canUseAccountInMode(user.accessState, mode)) {
+    return null;
+  }
+  return user;
 }
 
 export function readSessionPayload(request: Request): SessionPayload | null {
   const cookies = parseCookieHeader(request.headers.get("cookie"));
   const raw = cookies[COOKIE_NAME];
-  if (!raw) {
+  if (!raw || raw.length > 2048) {
     return null;
   }
 
-  const [encodedPayload, signature] = raw.split(".");
-  if (!encodedPayload || !signature) {
+  const [encodedPayload, signature, extra] = raw.split(".");
+  if (!encodedPayload || !signature || extra !== undefined || !/^[A-Za-z0-9_-]{43}$/.test(signature)) {
     return null;
   }
 
-  const expectedSignature = sign(encodedPayload);
-  if (expectedSignature.length !== signature.length) {
+  if (!timingSafeEqual(Buffer.from(sign(encodedPayload)), Buffer.from(signature))) {
     return null;
   }
 
-  const expectedBuffer = Buffer.from(expectedSignature);
-  const actualBuffer = Buffer.from(signature);
-
-  if (!timingSafeEqual(expectedBuffer, actualBuffer)) {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+  } catch {
     return null;
   }
-
-  const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as SessionPayload;
-  if (new Date(payload.expiresAt).getTime() <= Date.now()) {
-    return null;
-  }
+  if (!isCurrentSessionPayload(payload)) return null;
 
   return payload;
+}
+
+function isCurrentSessionPayload(value: unknown): value is SessionPayload {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Partial<SessionPayload>;
+  return (
+    typeof payload.userId === "string" && payload.userId.length > 0 &&
+    typeof payload.organizationId === "string" && payload.organizationId.length > 0 &&
+    typeof payload.sessionVersion === "number" && Number.isSafeInteger(payload.sessionVersion) &&
+    payload.sessionVersion >= 0 &&
+    typeof payload.expiresAt === "number" && Number.isSafeInteger(payload.expiresAt) &&
+    payload.expiresAt > Date.now()
+  );
 }
 
 function serializeSessionCookie(user: SessionUser): string {
@@ -141,8 +162,8 @@ function serializeSessionCookie(user: SessionUser): string {
   const payload: SessionPayload = {
     userId: user.id,
     organizationId: user.organizationId,
-    role: user.role,
-    expiresAt: expiresAt.toISOString()
+    sessionVersion: user.sessionVersion,
+    expiresAt: expiresAt.getTime()
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const signedValue = `${encodedPayload}.${sign(encodedPayload)}`;

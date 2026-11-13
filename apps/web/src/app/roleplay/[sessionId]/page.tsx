@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
+
 import { SessionShell } from "@/components/session-shell";
+import { trainingEnabled } from "@/lib/site-mode";
 
 type RoleplayPageProps = {
   params: Promise<{
@@ -7,6 +10,7 @@ type RoleplayPageProps = {
 };
 
 export default async function SessionPage({ params }: RoleplayPageProps) {
+  if (!trainingEnabled()) redirect("/");
   const { sessionId } = await params;
-  return <SessionShell sessionId={sessionId} />;
+  return <SessionShell key={sessionId} sessionId={sessionId} />;
 }

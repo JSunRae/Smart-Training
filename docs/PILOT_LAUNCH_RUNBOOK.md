@@ -1,6 +1,8 @@
 # Pilot Launch Runbook
 
-Last updated: 2026-05-29
+Last updated: 2026-11-13
+
+Current phase is enquiry-first, with no hosted provisioning before a client needs independent trial access. See [ENQUIRY_FIRST_LAUNCH.md](ENQUIRY_FIRST_LAUNCH.md). The selected workspace tier is Hobby; paid compute still requires separate approval.
 
 Start with the short operator handoff in [FIRST_HOSTED_PILOT_HANDOFF.md](./FIRST_HOSTED_PILOT_HANDOFF.md) if you need the fastest supported path for the first hosted pilot. Use this runbook as the detailed source of truth behind that handoff.
 
@@ -16,14 +18,13 @@ Fill these before launch:
 
 | Area                      | Owner   | Required decision                                                                    |
 | ------------------------- | ------- | ------------------------------------------------------------------------------------ |
-| Managed Postgres          | `Pilot` | Use Render Pro workspace, Virginia region, plus pre-pilot and weekly logical exports |
-| Web deploy                | `Pilot` | Use `onrender.com` for the first pilot                                               |
-| API deploy                | `Pilot` | Keep the API public; web uses private hostport routing for server-side calls         |
+| Managed Postgres          | `Pilot` | Future trial: Hobby workspace, Virginia region, paid Postgres only after spending approval; verify three-day PITR plus pre-pilot and weekly logical exports |
+| Frontend deploy           | `Pilot` | Use the approved Netlify pilot target; keep the enquiry site separate                 |
+| API deploy                | `Pilot` | Public Render API; Netlify uses its public HTTPS origin                              |
 | Secrets rotation          | `Pilot` | Pilot owns `APP_SESSION_SECRET` and `DATA_ENCRYPTION_KEY` changes                    |
 | Privacy/deletion requests | `Pilot` | Pilot owns the support contact shown on `/privacy`                                   |
+| Support inbox             | `Pilot` | Name the operator with access to and responsibility for monitoring the approved Outlook inbox before access opens |
 | Incident response         | `Pilot` | Pilot is the primary escalation path                                                 |
-| API deploy                | `Pilot` | Keep the API public; web uses private hostport routing for server-side calls         |
-| Secrets rotation          | `Pilot` | Pilot owns `APP_SESSION_SECRET` and `DATA_ENCRYPTION_KEY` changes                    |
 
 Record the completed values in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). For each launch-evidence row, capture the exact command or action, a `PASS` or `FAIL` result summary, the operator, the timestamp, an `Artifact / note location` entry, and a `Failure follow-up` only when the row failed or still needs action.
 
@@ -36,6 +37,8 @@ For the first hosted pilot, the variables that are truly mandatory are:
 - Web: one API routing variable and one public support contact.
 - API: `DATABASE_URL`, `APP_SESSION_SECRET`, and `DATA_ENCRYPTION_KEY`.
 - Runtime posture: keep `OPENAI_TEXT_ENABLED=false`, `VOICE_LAB_ENABLED=false`, and `SESSION_RETENTION_DAYS=30`.
+- `PILOT_ACCESS_MODE`: production defaults to `closed`. Set `invite` only for a separately authorized synthetic acceptance window or approved controlled pilot. Issue synthetic grants for validation; do not create customer grants before the final go decision.
+- Pilot support contact: retain the already approved `Jason_C_Rae@Outlook.com` on the application `/privacy` page unless a new contact change is approved. The `training@jasonrae.ai` marketing-site alias is a separate conditional website release; follow the recovery and forwarding checks in [WEBSITE_RELEASE_2026-09-19.md](WEBSITE_RELEASE_2026-09-19.md#recovery-follow-up).
 
 Operator-facing default story for the first hosted pilot:
 
@@ -51,24 +54,22 @@ Do not rely on the local file store in hosted production. If `DATABASE_URL` is m
 
 `pnpm release:check` is the repo release gate for the launch revision. It runs typecheck, lint, Vitest, the monorepo build, Playwright E2E, and `pnpm audit --prod`. Treat it as `PASS` only when it is run from the repo root on the intended launch revision and exits `0`. The production dependency audit is included in that gate, but hosted health, smoke, and manual QA are still separate go/no-go checks.
 
-1. Run `pnpm release:check` from the repo root.
-2. Push the release revision and create or sync the Render Blueprint in [render.yaml](../render.yaml).
-3. Confirm the Blueprint provisions:
+1. Run `pnpm release:check` on the exact committed candidate, after isolated real-Postgres migration, backfill, idempotence, and concurrency checks pass.
+2. Before hosted provisioning, obtain approval for the current provider estimate and exact target/scope. The selected Render Hobby workspace does not make compute or storage free.
+3. Push the approved revision and create or sync only [deploy/render-backend.yaml](../deploy/render-backend.yaml) for the selected hybrid topology. Root [render.yaml](../render.yaml) is the all-Render alternative; do not apply both.
+4. Confirm the backend Blueprint provisions:
    - `smart-training-db`
    - `smart-training-api`
-   - `smart-training-web`
    - API build/start commands: `pnpm build:api` and `pnpm --filter api exec next start --port $PORT`
    - API pre-deploy command: `pnpm --filter api db:bootstrap && pnpm seed`
-   - Web build/start commands: `pnpm build:web` and `pnpm --filter web exec next start --port $PORT`
-4. During initial Blueprint creation, provide the prompted `NEXT_PUBLIC_SUPPORT_EMAIL` value.
-5. For a brand-new hosted Postgres database, run the explicit database lifecycle commands once against the target `DATABASE_URL` before opening pilot access:
+5. The API pre-deploy hook runs schema bootstrap and idempotent seed. Record the hook result. For a brand-new or reset database, or a separately authorized workstation preflight, run the explicit commands once against the intended `DATABASE_URL`:
 
    ```powershell
    pnpm --filter api db:bootstrap
    pnpm seed
    ```
 
-   The Blueprint already runs the equivalent bootstrap plus idempotent seed during API pre-deploy with `pnpm --filter api db:bootstrap && pnpm seed`. Treat the manual commands above as hosted-launch relevant only when the pilot database is new, has been reset, or you want an explicit preflight check from an operator workstation. `db:migrate` remains the backward-compatible alias of `db:bootstrap`, and it only bootstraps missing schema objects.
+   `db:migrate` remains the backward-compatible alias of `db:bootstrap`, and it only bootstraps missing schema objects. Avoid duplicating a successful automatic hook unless performing the cases above.
 
    Success looks like one of these outcomes:
    - bootstrap exits cleanly and reports Postgres schema bootstrap completion
@@ -106,20 +107,40 @@ Do not rely on the local file store in hosted production. If `DATABASE_URL` is m
 
    `GET /api/health` confirms runtime posture only. It does not prove schema bootstrap or seeding.
 
-7. Run `pnpm smoke:hosted` with:
+7. Keep API access closed until the hosted synthetic acceptance window and target are approved. For that window only, set API `PILOT_ACCESS_MODE=invite` and issue a dedicated synthetic invitation. Configure the approved Netlify pilot target with the actual public HTTPS `INTERNAL_API_ORIGIN` for build and function runtime where selectable. Clear `INTERNAL_API_HOSTPORT` and `NEXT_PUBLIC_API_ORIGIN`; Render's private hostname is not reachable from Netlify. Keep the existing conversion site and normal previews in `marketing` mode. Rebuild the approved pilot target with `SMART_TRAINING_SITE_MODE=pilot`; this build setting is separate from API invite authorization.
+
+8. Run hosted smoke twice, using a fresh single-use synthetic invitation and matching `SMART_TRAINING_SMOKE_EMAIL` / `SMART_TRAINING_SMOKE_INVITATION_TOKEN` process environment for each run. Issue each invitation through [the operator runbook](PILOT_ACCESS_RUNBOOK.md) against the intended API database. Enter the token at a hidden prompt, not as a command argument or saved script value. The first run targets the API directly; the second targets the web origin to exercise the Netlify proxy:
 
 ```powershell
-pnpm smoke:hosted -- --api https://api.your-domain.example --web https://app.your-domain.example --support-email pilot-support@example.com
+$apiUrl = Read-Host 'Enter the approved Render API origin'
+$webUrl = Read-Host 'Enter the approved Netlify pilot web origin'
+$env:SMART_TRAINING_SMOKE_EMAIL = 'synthetic-direct@example.com'
+$secureGrant = Read-Host 'Paste the fresh direct-smoke invitation token' -AsSecureString
+$env:SMART_TRAINING_SMOKE_INVITATION_TOKEN = [System.Net.NetworkCredential]::new('', $secureGrant).Password
+pnpm smoke:hosted -- --api $apiUrl --web $webUrl --support-email Jason_C_Rae@Outlook.com
+$secureGrant.Dispose()
+Remove-Item Env:SMART_TRAINING_SMOKE_EMAIL, Env:SMART_TRAINING_SMOKE_INVITATION_TOKEN
+
+$env:SMART_TRAINING_SMOKE_EMAIL = 'synthetic-proxy@example.com'
+$secureGrant = Read-Host 'Paste a separate fresh proxy-smoke invitation token' -AsSecureString
+$env:SMART_TRAINING_SMOKE_INVITATION_TOKEN = [System.Net.NetworkCredential]::new('', $secureGrant).Password
+pnpm smoke:hosted -- --api $webUrl --web $webUrl --support-email Jason_C_Rae@Outlook.com
+$secureGrant.Dispose()
+Remove-Item Env:SMART_TRAINING_SMOKE_EMAIL, Env:SMART_TRAINING_SMOKE_INVITATION_TOKEN
 ```
 
-The hosted smoke path is limited to launch smoke. It verifies health posture, optional `/privacy` retention and support-contact posture, registration, dashboard access, session start, seller turn, coach response, session completion, completed-session visibility on the dashboard, account deletion, and logout invalidation.
-Record the exact command line used, the pass or fail result, the operator, the timestamp, the log path or note URL if one exists, and any next follow-up action in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).
-The privacy check must confirm that `/privacy` shows the exact operator support email or support URL configured for launch.
-8. Run the hosted demo rehearsal in [HOSTED_DEMO_FLOW.md](HOSTED_DEMO_FLOW.md) against the live environment and record the result in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).
-9. Run the hosted manual QA checklist in [HOSTED_QA_CHECKLIST.md](HOSTED_QA_CHECKLIST.md).
+`--api` selects the origin for health, registration, roleplay and deletion. `--web` only checks `/privacy`; it does not proxy application calls. Each smoke consumes its invitation and deletes its synthetic account, so the second run needs a new grant. Smoke verifies health, optional privacy, invite registration, dashboard, roleplay, coach, completion, deletion and rejection of the old cookie. It does not verify browser cookie behavior, reset, all-device sign-out, tenant isolation, real-Postgres migration/concurrency, monitoring, backup restore or iPhone behavior.
+
+Record both exact commands, synthetic email identifiers (not invitation tokens), result, operator, timestamp, artifact and follow-up in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). The privacy check must confirm `Jason_C_Rae@Outlook.com` and the required retention/deletion wording.
+9. Run the hosted demo rehearsal in [HOSTED_DEMO_FLOW.md](HOSTED_DEMO_FLOW.md) against the approved pilot target and record the result in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).
+10. Run the hosted manual QA checklist in [HOSTED_QA_CHECKLIST.md](HOSTED_QA_CHECKLIST.md), including the full physical iPhone Safari journey in [TESTING_AND_IPHONE_GUIDE_2026-09-19.md](TESTING_AND_IPHONE_GUIDE_2026-09-19.md): invite/sign-in, roleplay, keyboard-over-reply, long transcript, portrait/landscape, refresh/background-resume, connection loss, sign-out, and deletion. Record the actual model and iOS version. Desktop emulation is not device evidence.
 Use hosted manual QA, not the smoke script, to confirm acceptance checks such as `/privacy`, transcript reopen behavior, deletion, and auth re-entry. If the demo rehearsal used the same live environment, you may reuse it only as supporting evidence for the core text workflow section.
 Immediately record the final hosted QA outcome in the `Hosted QA checklist` row in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). A `PASS` there means the checklist cleared with no blocking defects; a `FAIL` means a required acceptance check failed or a blocking defect was observed. Use `Artifact / note location` for any checklist copy, screenshot path, note URL, or the short note that captures the scenario used, transcript reopen confirmation, deletion re-auth result, and defect summary when no external artifact was saved.
-10. Fill in the live URLs, support contact, deploy ids, recovery owner, and rollback target in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).
+11. Fill in the live Netlify and Render URLs, support contact and named inbox owner, deploy ids, recovery owner, and rollback targets in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). Use the launch record as the single source for launch evidence.
+
+After all synthetic acceptance is complete, return API access to `PILOT_ACCESS_MODE=closed`. Keep it closed until the owner records the final go decision. At that point, set `invite` for the approved cohort and issue only the explicitly authorized customer invitations.
+
+Do not deliver real credentials until the final go decision is recorded and the owner authorizes a named cohort, organisation membership, identity checks, support procedure, and separate delivery through a verified channel. The operator CLI never sends tokens. An enquiry submission or notification is not pilot consent, identity verification, or transactional-sender readiness.
 
 ## 3A. What each hosted check proves
 
@@ -152,8 +173,8 @@ The monitoring baseline is operational only when every required row below is con
 | Capability | Exact check / probe | Configured when | Record evidence in | Owner |
 | --- | --- | --- | --- | --- |
 | Health probe | Run the hosted `/api/health` PowerShell check shown in Section 3 against the live API URL and confirm `status=ok`, `storageBackend=postgres`, `openAiTextEnabled=false`, and `voiceLabEnabled=false`. Also confirm `openAiApiConfigured` matches operator intent: `false` for the standard pilot posture or `true` only for deliberate key preprovisioning. | The live health URL is saved in the launch record and the latest result is captured as `PASS` with the returned posture values. | Section 4 `Live /api/health posture check` and Section 4A `Health probe` in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). | `Pilot` |
-| Restart / crash visibility | In the Render workspace, confirm notifications are enabled for failed deploys and service incidents, then open both `smart-training-api` and `smart-training-web` event or deploy history pages and verify you can see restart or crash history. | The notification destination exists, failure notifications are enabled for the pilot workspace or services, and both services show accessible event history. | Section 4A `Restart / crash visibility` in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). | `Pilot` |
-| Service logs | Open the live Render logs for `smart-training-api` and `smart-training-web` and confirm the operator can access current request and runtime logs for both services. | The operator can open both service log views from the Render dashboard without additional setup on launch day. | Section 4A `Service logs` in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). | `Pilot` |
+| Restart / crash visibility | Confirm Render failure notifications and event history for `smart-training-api`, and Netlify deploy/function failure visibility for the approved pilot frontend. | The notification destination is known, and the operator can inspect backend and frontend deploy/runtime failure evidence. | Section 4A `Restart / crash visibility` in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). | `Pilot` |
+| Service logs | Open Render logs for `smart-training-api` and Netlify function/runtime logs for the approved pilot frontend; confirm the named operator can access them. | The operator can open the API and frontend log views without additional setup on launch day. | Section 4A `Service logs` in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). | `Pilot` |
 | Database visibility | Open the Render Postgres dashboard for `smart-training-db` and confirm database status plus recent connection or error visibility are available from the provider view. | The operator can reach the database dashboard and inspect current status plus any visible connection failures or auth errors. | Section 4A `Database visibility` in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). | `Pilot` |
 | Backup confirmation | Confirm the managed Postgres instance shows PITR or backup coverage in Render and that the restore owner is explicitly assigned. | The recovery window relied on for the pilot is filled in, the provider backup posture is visible, and the restore owner remains named in the launch record. | Section 3 `Recovery window being relied on`, Section 5 `Database restore owner`, and Section 4A `Backup confirmation` in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). | `Pilot` |
 | Manual logical export | Run one manual logical export before pilot access opens, save it to operator-controlled storage, and repeat weekly during the pilot. | The pre-launch export has a dated evidence note with storage location and operator name; the weekly cadence owner is explicit. | Section 4A `Manual logical export` in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). | `Pilot` |
@@ -179,13 +200,16 @@ Go only if all are true:
 
 1. `pnpm release:check` passed from the current repo revision, meaning the repo-root run completed typecheck, lint, Vitest, build, Playwright E2E, and `pnpm audit --prod` with exit `0`.
 2. Hosted smoke passed cleanly.
-3. Hosted demo rehearsal passed cleanly and was recorded.
-4. Hosted manual QA passed cleanly.
-5. `/privacy` shows the exact operator-facing support email or support URL configured through `NEXT_PUBLIC_SUPPORT_EMAIL` or `NEXT_PUBLIC_SUPPORT_URL`.
-6. Section 4A monitoring evidence in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md) is fully recorded with no `TBD` rows.
-7. The pre-pilot logical export exists and is evidenced in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).
-8. `OPENAI_TEXT_ENABLED=false` and `VOICE_LAB_ENABLED=false` in the pilot environment.
-9. `DATABASE_URL` is present for the live API environment, and no production file-store override is active unless it was explicitly approved as a temporary exception.
+3. Both the direct API smoke and web-origin proxy smoke passed using separate fresh synthetic invitations.
+4. Hosted demo rehearsal passed cleanly and was recorded.
+5. Hosted manual QA passed cleanly, including physical iPhone Safari checks with device model and iOS version recorded.
+6. `/privacy` shows the already approved pilot contact `Jason_C_Rae@Outlook.com` and required retention/deletion wording.
+7. A named operator has confirmed access to and current monitoring responsibility for the approved support inbox; recovery and privacy request ownership are recorded.
+8. Section 4A monitoring evidence in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md) is fully recorded with no `TBD` rows.
+9. The pre-pilot logical export exists and is evidenced in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).
+10. `OPENAI_TEXT_ENABLED=false` and `VOICE_LAB_ENABLED=false` in the pilot environment.
+11. `DATABASE_URL` is present for the live API environment, and no production file-store override is active unless it was explicitly approved as a temporary exception.
+12. The owner has approved the named cohort, organisation membership and separate verified-channel invitation delivery. Without that go decision, issue no customer credentials.
 
 Treat the `Hosted QA checklist` row in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md) as the authoritative hosted-QA handoff. If that row is `FAIL` or still `TBD`, the launch decision stays no-go.
 
@@ -193,11 +217,11 @@ No-go if any are false.
 
 ## 7. Rollback posture
 
-If the hosted smoke or QA pass fails after deployment:
+If hosted smoke or QA fails after deployment:
 
 1. Pause pilot access.
-2. Roll back the failing service to the prior known-good deploy.
+2. Roll back the failing Render API or approved Netlify pilot frontend to its recorded known-good deploy.
 3. Re-run `GET /api/health` and confirm the same five-key payload above.
-4. Re-run hosted smoke before reopening access.
+4. Re-run direct and proxy hosted smoke with fresh synthetic invitations before considering re-opening access.
 
 Escalate from service rollback to database restore only when pilot access is already paused and the issue is confirmed to be data loss, unrecoverable corruption, or a release issue that service rollback cannot correct. The `Pilot` operator executes the restore using Render PITR or the retained logical export recorded in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).

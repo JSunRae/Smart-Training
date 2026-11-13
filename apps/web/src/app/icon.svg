@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <title>Smart Training</title>
+  <path fill="#196d67" d="M18 0h28a18 18 0 0 1 18 18v28a18 18 0 0 1-18 18H0V18A18 18 0 0 1 18 0Z"/>
+  <text x="12" y="46" fill="#fffaf3" font-family="Arial,sans-serif" font-size="46" font-weight="700" letter-spacing="-3">st</text>
+</svg>

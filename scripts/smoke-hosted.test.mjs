@@ -30,6 +30,21 @@ describe("smoke-hosted helpers", () => {
     ).toThrow(/Invalid boolean value for SMART_TRAINING_EXPECT_OPENAI_TEXT_ENABLED: maybe/);
   });
 
+  it("requires a paired synthetic invitation for a hosted origin", () => {
+    const token = "a".repeat(43);
+    const env = { SMART_TRAINING_SMOKE_EMAIL: "Smoke@Example.com" };
+    expect(() => resolveSmokeConfig(["--api", "https://api.example.com"], env)).toThrow(
+      /SMART_TRAINING_SMOKE_INVITATION_TOKEN/
+    );
+    const credentials = { ...env, SMART_TRAINING_SMOKE_INVITATION_TOKEN: token };
+    expect(resolveSmokeConfig(["--api", "https://api.example.com"], credentials).registration).toEqual({
+      email: "smoke@example.com",
+      invitationToken: token
+    });
+    expect(() => resolveSmokeConfig(["--api", "http://api.example.com"], credentials)).toThrow(/HTTPS/);
+    expect(resolveSmokeConfig(["--api", "http://127.0.0.1:3000"], {})).not.toHaveProperty("registration");
+  });
+
   it("surfaces non-200 health failures with the response body", async () => {
     const response = new Response(JSON.stringify({ error: "downstream unavailable" }), {
       headers: {

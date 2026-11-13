@@ -1,0 +1,40 @@
+# Prepared only; applying this creates billable API + PostgreSQL resources.
+# Pair with the NEW Smart Training Netlify project, not the original web service.
+services:
+  - type: web
+    name: smart-training-api
+    runtime: node
+    plan: starter
+    region: virginia
+    autoDeployTrigger: checksPass
+    healthCheckPath: /api/health
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build:api
+    preDeployCommand: pnpm --filter api db:bootstrap && pnpm seed
+    startCommand: pnpm --filter api exec next start --port $PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.18.0
+      - key: PORT
+        value: "10000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smart-training-db
+          property: connectionString
+      - key: APP_SESSION_SECRET
+        generateValue: true
+      - key: DATA_ENCRYPTION_KEY
+        generateValue: true
+      - key: SESSION_RETENTION_DAYS
+        value: "30"
+      - key: OPENAI_TEXT_ENABLED
+        value: "false"
+      - key: VOICE_LAB_ENABLED
+        value: "false"
+databases:
+  - name: smart-training-db
+    plan: basic-256mb
+    region: virginia
+    diskSizeGB: 15
+    storageAutoscalingEnabled: true

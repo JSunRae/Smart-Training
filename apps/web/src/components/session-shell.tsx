@@ -1,7 +1,7 @@
 "use client";
 
 import type { MessageResponse, SessionDetail, SessionResponse } from "@core/contracts";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ApiClientError, apiGet, apiPost, toErrorMessage } from "@/lib/api";
@@ -22,27 +22,34 @@ export function SessionShell({ sessionId }: { sessionId: string }) {
   const [busyAction, setBusyAction] = useState<"message" | "coach" | "complete" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const loadSession = useEffectEvent(async (nextSessionId: string) => {
-    try {
-      const response = await apiGet<SessionResponse>(`/api/sessions/${nextSessionId}`);
-      setViewState({ status: "ready", session: response.session });
-    } catch (error) {
-      if (error instanceof ApiClientError && error.status === 401) {
-        router.replace("/");
-        return;
-      }
-
-      setViewState({
-        status: "error",
-        message: toErrorMessage(error, "Unable to load the requested roleplay session.")
-      });
-    }
-  });
-
   useEffect(() => {
-    setViewState({ status: "loading" });
-    void loadSession(sessionId);
-  }, [sessionId]);
+    let ignore = false;
+
+    async function loadSession() {
+      try {
+        const response = await apiGet<SessionResponse>(`/api/sessions/${sessionId}`);
+        if (!ignore) {
+          setViewState({ status: "ready", session: response.session });
+        }
+      } catch (error) {
+        if (ignore) return;
+        if (error instanceof ApiClientError && error.status === 401) {
+          router.replace("/");
+          return;
+        }
+
+        setViewState({
+          status: "error",
+          message: toErrorMessage(error, "Unable to load the requested roleplay session.")
+        });
+      }
+    }
+
+    void loadSession();
+    return () => {
+      ignore = true;
+    };
+  }, [router, sessionId]);
 
   const session = viewState.status === "ready" ? viewState.session : null;
 

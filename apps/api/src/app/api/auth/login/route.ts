@@ -1,27 +1,30 @@
 import type { LoginRequest } from "@core/contracts";
 
 import { createSessionResponse, verifyPassword } from "@/lib/auth";
+import { createLookupHash } from "@/lib/data-protection";
 import { isNonEmptyString, jsonError, readJson } from "@/lib/http";
+import { canUseAccountInMode, getPilotAccessMode } from "@/lib/pilot-access";
 import {
   createRateLimitResponse,
-  getRequestIdentifier,
   isRateLimited
 } from "@/lib/rate-limit";
 import { getAccountByEmail, markTranscriptConsent } from "@/lib/repository";
 import { toAuthResponse } from "@/lib/roleplay";
 
 export async function POST(request: Request) {
-  const body = await readJson<LoginRequest>(request);
+  const mode = getPilotAccessMode();
+  if (mode === "closed") return jsonError("Workspace access is closed.", 403);
 
-  if (!isNonEmptyString(body.email) || !isNonEmptyString(body.password)) {
+  const body = await readJson<LoginRequest | null>(request).catch(() => null);
+
+  if (!body || !isNonEmptyString(body.email) || !isNonEmptyString(body.password)) {
     return jsonError("Email and password are required.");
   }
 
   const email = body.email.trim().toLowerCase();
-  const rateLimitKey = `${getRequestIdentifier(request)}:${email}`;
   const retryAfter = await isRateLimited({
     bucket: "auth-login",
-    identifier: rateLimitKey,
+    identifier: createLookupHash("auth-login", email),
     limit: 12,
     windowMs: 10 * 60 * 1000
   });
@@ -35,7 +38,7 @@ export async function POST(request: Request) {
   const account = await getAccountByEmail(email);
   const user = account?.user;
 
-  if (!user || !verifyPassword(body.password, user.passwordHash)) {
+  if (!user || !canUseAccountInMode(user.accessState, mode) || !verifyPassword(body.password, user.passwordHash)) {
     return jsonError("Invalid email or password.", 401);
   }
 
@@ -44,25 +47,29 @@ export async function POST(request: Request) {
     return jsonError("Organization not found for this account.", 404);
   }
 
-  if (!user.transcriptConsentAt && !body.acceptTranscriptConsent) {
+  const transcriptConsentAt = user.transcriptConsentAt;
+  const accessState = user.accessState ?? "unapproved";
+  const sessionVersion = user.sessionVersion ?? 0;
+  if (!transcriptConsentAt && body.acceptTranscriptConsent !== true) {
     return jsonError("Transcript consent is required before a session can be recorded.");
   }
 
-  const sessionUser =
-    !user.transcriptConsentAt && body.acceptTranscriptConsent
-      ? await markTranscriptConsent(user.id, user.organizationId)
-      : {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          organizationId: user.organizationId,
-          role: user.role,
-          transcriptConsentAt: user.transcriptConsentAt ? new Date(user.transcriptConsentAt) : null,
-          organization
-        };
+  const sessionUser = transcriptConsentAt
+    ? {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        organizationId: user.organizationId,
+        role: user.role,
+        accessState,
+        sessionVersion,
+        transcriptConsentAt: new Date(transcriptConsentAt),
+        organization
+      }
+    : await markTranscriptConsent(user.id, user.organizationId);
 
-  if (!sessionUser) {
-    return jsonError("Unable to load the authenticated user.", 500);
+  if (!sessionUser || sessionUser.sessionVersion !== sessionVersion || !canUseAccountInMode(sessionUser.accessState, mode)) {
+    return jsonError("Invalid email or password.", 401);
   }
 
   return createSessionResponse(sessionUser, toAuthResponse(sessionUser));

@@ -4,6 +4,7 @@ import type {
   DashboardResponse,
   LoginRequest,
   RegisterRequest,
+  ResetPasswordRequest,
   SessionResponse,
   SessionSummary
 } from "@core/contracts";
@@ -28,6 +29,7 @@ type AuthFormState = {
   email: string;
   password: string;
   organizationName: string;
+  invitationToken: string;
   acceptTranscriptConsent: boolean;
 };
 
@@ -36,7 +38,8 @@ const INITIAL_FORM: AuthFormState = {
   email: "",
   password: "",
   organizationName: "",
-  acceptTranscriptConsent: true
+  invitationToken: "",
+  acceptTranscriptConsent: false
 };
 
 const PRACTICE_POINTS = [
@@ -63,10 +66,12 @@ async function readDashboardView(): Promise<ViewState> {
 
 export function HomeShell({
   initialMode,
-  voiceLabEnabled
+  voiceLabEnabled,
+  inviteOnly = false
 }: {
   initialMode: Mode;
   voiceLabEnabled: boolean;
+  inviteOnly?: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -75,6 +80,11 @@ export function HomeShell({
   const [authError, setAuthError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [showReset, setShowReset] = useState(false);
+  const [resetToken, setResetToken] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
@@ -136,7 +146,9 @@ export function HomeShell({
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          organizationName: formData.organizationName,
+          ...(inviteOnly
+            ? { invitationToken: formData.invitationToken }
+            : { organizationName: formData.organizationName }),
           acceptTranscriptConsent: formData.acceptTranscriptConsent
         };
         await apiPost("/api/auth/register", payload);
@@ -151,11 +163,32 @@ export function HomeShell({
 
       setFormData((current) => ({
         ...current,
-        password: ""
+        password: "",
+        acceptTranscriptConsent: false
       }));
       setViewState(await readDashboardView());
     } catch (error) {
       setAuthError(toErrorMessage(error, "Unable to authenticate."));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleResetSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusyAction("reset");
+    setResetError(null);
+    setResetMessage(null);
+    try {
+      const payload: ResetPasswordRequest = { resetToken, password: resetPassword };
+      await apiPost("/api/auth/reset-password", payload);
+      setResetToken("");
+      setResetPassword("");
+      setShowReset(false);
+      setMode("login");
+      setResetMessage("Password updated. Sign in with your new password.");
+    } catch (error) {
+      setResetError(toErrorMessage(error, "Unable to reset the password."));
     } finally {
       setBusyAction(null);
     }
@@ -304,7 +337,7 @@ export function HomeShell({
                   type="button"
                   onClick={() => setMode("register")}
                 >
-                  Create workspace
+                  {inviteOnly ? "Join pilot" : "Create workspace"}
                 </button>
                 <button
                   className={mode === "login" ? styles.tabActive : styles.tab}
@@ -317,11 +350,17 @@ export function HomeShell({
 
               <div className={styles.authIntro}>
                 <span className={styles.eyebrow}>
-                  {mode === "register" ? "New Team" : "Returning User"}
+                  {mode === "register"
+                    ? inviteOnly
+                      ? "Pilot invitation"
+                      : "New Team"
+                    : "Returning User"}
                 </span>
                 <h2>
                   {mode === "register"
-                    ? "Create an organization and start a first roleplay."
+                    ? inviteOnly
+                      ? "Use your invitation to join the pilot workspace."
+                      : "Create an organization and start a first roleplay."
                     : "Resume practice from your saved session history."}
                 </h2>
               </div>
@@ -342,21 +381,40 @@ export function HomeShell({
                       />
                     </label>
 
-                    <label className={styles.field}>
-                      <span>Organization</span>
-                      <input
-                        className={styles.input}
-                        value={formData.organizationName}
-                        onChange={(event) =>
-                          setFormData((current) => ({
-                            ...current,
-                            organizationName: event.target.value
-                          }))
-                        }
-                        placeholder="Northwind Revenue Team"
-                        required
-                      />
-                    </label>
+                    {inviteOnly ? (
+                      <label className={styles.field}>
+                        <span>Invitation code</span>
+                        <input
+                          className={styles.input}
+                          type="password"
+                          value={formData.invitationToken}
+                          onChange={(event) =>
+                            setFormData((current) => ({
+                              ...current,
+                              invitationToken: event.target.value
+                            }))
+                          }
+                          autoComplete="off"
+                          required
+                        />
+                      </label>
+                    ) : (
+                      <label className={styles.field}>
+                        <span>Organization</span>
+                        <input
+                          className={styles.input}
+                          value={formData.organizationName}
+                          onChange={(event) =>
+                            setFormData((current) => ({
+                              ...current,
+                              organizationName: event.target.value
+                            }))
+                          }
+                          placeholder="Northwind Revenue Team"
+                          required
+                        />
+                      </label>
+                    )}
                   </>
                 ) : null}
 
@@ -398,6 +456,7 @@ export function HomeShell({
                       }))
                     }
                     type="checkbox"
+                    required={mode === "register"}
                   />
                   <span>
                     I consent to transcript storage for coaching and session review inside this
@@ -409,7 +468,12 @@ export function HomeShell({
                   </span>
                 </label>
 
-                {authError ? <p className={styles.inlineError}>{authError}</p> : null}
+                {authError ? (
+                  <p className={styles.inlineError} role="alert">
+                    {authError}
+                  </p>
+                ) : null}
+                {resetMessage ? <p role="status">{resetMessage}</p> : null}
 
                 <button
                   className={styles.primaryButton}
@@ -419,10 +483,72 @@ export function HomeShell({
                   {busyAction === "auth"
                     ? "Working..."
                     : mode === "register"
-                      ? "Create workspace"
+                      ? inviteOnly
+                        ? "Join pilot"
+                        : "Create workspace"
                       : "Sign in"}
                 </button>
               </form>
+              {inviteOnly && mode === "login" ? (
+                <div className={styles.resetPanel}>
+                  <p>
+                    Need a password reset? Contact support using the details on{" "}
+                    <Link className={styles.inlineLink} href="/privacy">
+                      /privacy
+                    </Link>
+                    . After verifying your identity, support will provide a reset code.
+                  </p>
+                  <button
+                    className={styles.secondaryButton}
+                    type="button"
+                    onClick={() => {
+                      setShowReset((shown) => !shown);
+                      setResetError(null);
+                    }}
+                  >
+                    I have a reset code
+                  </button>
+                  {showReset ? (
+                    <form className={styles.form} onSubmit={handleResetSubmit}>
+                      <label className={styles.field}>
+                        <span>Reset code</span>
+                        <input
+                          className={styles.input}
+                          type="password"
+                          value={resetToken}
+                          onChange={(event) => setResetToken(event.target.value)}
+                          autoComplete="off"
+                          required
+                        />
+                      </label>
+                      <label className={styles.field}>
+                        <span>New password</span>
+                        <input
+                          className={styles.input}
+                          type="password"
+                          value={resetPassword}
+                          onChange={(event) => setResetPassword(event.target.value)}
+                          autoComplete="new-password"
+                          minLength={10}
+                          required
+                        />
+                      </label>
+                      {resetError ? (
+                        <p className={styles.inlineError} role="alert">
+                          {resetError}
+                        </p>
+                      ) : null}
+                      <button
+                        className={styles.primaryButton}
+                        disabled={busyAction === "reset"}
+                        type="submit"
+                      >
+                        {busyAction === "reset" ? "Updating..." : "Reset password"}
+                      </button>
+                    </form>
+                  ) : null}
+                </div>
+              ) : null}
             </aside>
           </div>
         </div>
@@ -463,7 +589,7 @@ export function HomeShell({
                 type="button"
                 onClick={() => void handleLogout()}
               >
-                {busyAction === "logout" ? "Signing out..." : "Sign out"}
+                {busyAction === "logout" ? "Signing out..." : inviteOnly ? "Sign out on all devices" : "Sign out"}
               </button>
               <button
                 className={styles.tertiaryButton}

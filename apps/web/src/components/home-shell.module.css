@@ -230,6 +230,14 @@
   font-weight: 600;
 }
 
+.resetPanel {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .primaryButton,
 .secondaryButton,
 .tertiaryButton {

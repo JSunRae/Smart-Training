@@ -66,6 +66,8 @@ services:
           type: web
           name: smart-training-api
           property: hostport
+      - key: SMART_TRAINING_SITE_MODE
+        value: pilot
       - key: NEXT_PUBLIC_SUPPORT_NAME
         value: Smart Training Pilot Support
       - key: NEXT_PUBLIC_SUPPORT_EMAIL

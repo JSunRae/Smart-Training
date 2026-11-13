@@ -4,35 +4,29 @@ import { getDatabaseUrl } from "./database-config";
 import { getSessionRetentionDays } from "./env";
 
 type PostgresRuntime = {
-  pool: PgPool;
-  ready: Promise<void>;
+  ready: Promise<PgPool>;
   url: string;
 };
+
+const SMART_TRAINING_SCHEMA_LOCK_ID = 1_983_611_252;
 
 declare global {
   var __smartTrainingPostgresRuntime__: PostgresRuntime | undefined;
 }
 
-export async function withPostgres<T>(
-  callback: (pool: PgPool) => Promise<T>
-): Promise<T> {
-  const runtime = await getPostgresRuntime();
-  await runtime.ready;
-  return callback(runtime.pool);
+export async function withPostgres<T>(callback: (pool: PgPool) => Promise<T>): Promise<T> {
+  return callback(await getPostgresPool());
 }
 
 export async function ensurePostgresSchemaReady(): Promise<void> {
-  const runtime = await getPostgresRuntime();
-  await runtime.ready;
+  await getPostgresPool();
 }
 
 export async function withPostgresTransaction<T>(
   callback: (client: PoolClient) => Promise<T>
 ): Promise<T> {
-  const runtime = await getPostgresRuntime();
-  await runtime.ready;
-
-  const client = await runtime.pool.connect();
+  const pool = await getPostgresPool();
+  const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await pruneExpiredSessions(client);
@@ -54,10 +48,11 @@ export async function resetPostgresRuntime(): Promise<void> {
   }
 
   delete globalThis.__smartTrainingPostgresRuntime__;
-  await runtime.pool.end();
+  const pool = await runtime.ready.catch(() => undefined);
+  await pool?.end();
 }
 
-async function getPostgresRuntime(): Promise<PostgresRuntime> {
+function getPostgresPool(): Promise<PgPool> {
   const url = getDatabaseUrl();
   if (!url) {
     throw new Error("DATABASE_URL is required for the Postgres backend.");
@@ -65,25 +60,35 @@ async function getPostgresRuntime(): Promise<PostgresRuntime> {
 
   const existing = globalThis.__smartTrainingPostgresRuntime__;
   if (existing?.url === url) {
-    return existing;
+    return existing.ready;
   }
 
-  if (existing) {
-    await existing.pool.end();
-  }
-
-  const pool = await createPool(url);
-  const runtime: PostgresRuntime = {
-    url,
-    pool,
-    ready: ensureSchema(pool)
-  };
-  globalThis.__smartTrainingPostgresRuntime__ = runtime;
-  return runtime;
+  const ready = initializePostgres(url, existing?.ready);
+  globalThis.__smartTrainingPostgresRuntime__ = { url, ready };
+  void ready.catch(() => {
+    if (globalThis.__smartTrainingPostgresRuntime__?.ready === ready) {
+      delete globalThis.__smartTrainingPostgresRuntime__;
+    }
+  });
+  return ready;
 }
 
-async function createPool(url: string): Promise<PgPool> {
-  if (url.startsWith("pg-mem://")) {
+async function initializePostgres(url: string, previous?: Promise<PgPool>): Promise<PgPool> {
+  const previousPool = await previous?.catch(() => undefined);
+  await previousPool?.end();
+  const inMemory = url.startsWith("pg-mem://");
+  const pool = await createPool(url, inMemory);
+  try {
+    await ensureSchema(pool, inMemory);
+    return pool;
+  } catch (error) {
+    await pool.end();
+    throw error;
+  }
+}
+
+async function createPool(url: string, inMemory: boolean): Promise<PgPool> {
+  if (inMemory) {
     const { newDb } = await import("pg-mem");
     const database = newDb({ autoCreateForeignKeyIndices: true });
     const adapter = database.adapters.createPg();
@@ -96,8 +101,27 @@ async function createPool(url: string): Promise<PgPool> {
   });
 }
 
-async function ensureSchema(pool: PgPool): Promise<void> {
-  await pool.query(`
+async function ensureSchema(pool: PgPool, inMemory: boolean): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    if (!inMemory) {
+      // Concurrent CREATE TABLE IF NOT EXISTS calls can race in the Postgres catalog.
+      await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [SMART_TRAINING_SCHEMA_LOCK_ID]);
+    }
+    await applySchema(client);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+  await pruneExpiredSessions(pool);
+}
+
+async function applySchema(client: PoolClient): Promise<void> {
+  await client.query(`
     CREATE TABLE IF NOT EXISTS organizations (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -114,6 +138,8 @@ async function ensureSchema(pool: PgPool): Promise<void> {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('ADMIN', 'TRAINER', 'SELLER')),
       transcript_consent_at TIMESTAMPTZ NULL,
+      access_state TEXT NOT NULL DEFAULT 'unapproved',
+      session_version INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL,
       organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE
@@ -197,7 +223,27 @@ async function ensureSchema(pool: PgPool): Promise<void> {
       ON rate_limit_windows (expires_at);
   `);
 
-  await pruneExpiredSessions(pool);
+  await client.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS access_state TEXT NOT NULL DEFAULT 'unapproved';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
+
+    CREATE TABLE IF NOT EXISTS pilot_invitations (
+      token_hash TEXT PRIMARY KEY,
+      email_lookup_hash TEXT NOT NULL UNIQUE,
+      organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK (role IN ('ADMIN', 'SELLER')),
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS pilot_invitations_expiry_idx ON pilot_invitations (expires_at);
+
+    CREATE TABLE IF NOT EXISTS pilot_password_resets (
+      token_hash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS pilot_password_resets_expiry_idx ON pilot_password_resets (expires_at);
+  `);
 }
 
 async function pruneExpiredSessions(executor: PgPool | PoolClient): Promise<void> {
