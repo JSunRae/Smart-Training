@@ -42,13 +42,14 @@ Stop and declare `No-go` if `pnpm release:check` fails or was not run on the exa
 
 ## 3. Render API and database deployment
 
-In Render, create or sync only [deploy/render-backend.yaml](../deploy/render-backend.yaml). Confirm `smart-training-db` and `smart-training-api` provision. It is the hybrid backend-only Blueprint; root [render.yaml](../render.yaml) also creates a Render web service and is the all-Render alternative. A local edit does not update a hosted service until the selected revision is deployed.
+Select the approved branch and [backend-only Blueprint](../deploy/render-backend.yaml). Confirm `smart-training-db` on PostgreSQL 16 and `smart-training-api` at the approved revision. The Blueprint selects manual API deploys. Root [render.yaml](../render.yaml) defines the all-Render alternative.
 
-Copy from Render into Section 3 of [PILOT_LAUNCH_RECORD.md](./PILOT_LAUNCH_RECORD.md) as soon as they exist:
+Record the following in Section 3 of [PILOT_LAUNCH_RECORD.md](./PILOT_LAUNCH_RECORD.md) as soon as they exist.
 
 - Netlify pilot web URL
 - API URL
 - `/api/health` URL
+- Actual PostgreSQL server version
 - Last known-good Netlify pilot web deploy id
 - Last known-good API deploy id
 
@@ -67,13 +68,13 @@ Keep production API `PILOT_ACCESS_MODE` unset/closed until an authorized hosted 
 
 ## 3A. Netlify pilot frontend
 
-Use the approved Netlify pilot target. Set `INTERNAL_API_ORIGIN` to the actual public HTTPS Render API origin for build and function runtime where selectable; clear `INTERNAL_API_HOSTPORT` and `NEXT_PUBLIC_API_ORIGIN`. Keep ordinary previews and the existing conversion production site in `marketing` mode. Set the build-time site mode to `pilot` only on the explicitly approved pilot target. Do not switch the current marketing production deploy as a diagnostic step.
+Use the [dedicated Netlify configuration](DEPLOYMENT_NETLIFY.md#select-the-dedicated-pilot-configuration). Set the pilot project's package directory to `deploy/netlify-pilot` and keep the base at the repository root. Set `INTERNAL_API_ORIGIN` to the approved public HTTPS Render API origin for the production context. Verify the config, adapter, publish directory and commit in the build log.
 
-Confirm the pilot page uses the approved Outlook support contact, sign-in and invitation UI, and that its same-origin `/api/*` rewrite targets the intended API. The alias contact change remains a separate website release and must not be implied by this pilot setup.
+Confirm the pilot page uses the approved Outlook support contact, sign-in and invitation UI, sends the noindex header, and that its same-origin `/api/*` rewrite targets the intended API.
 
 ## 4. Live verification
 
-Run only after the hosted target is authorized, API access is in the scoped synthetic `invite` mode, and the dedicated synthetic invitation is issued. Set `SMART_TRAINING_SMOKE_EMAIL` and `SMART_TRAINING_SMOKE_INVITATION_TOKEN` in the process environment; do not put the token in command text, saved files or logs. Each invite is single-use and each smoke deletes its test account, so issue a separate fresh grant for each run.
+Once the hosted target and synthetic `invite` window are authorized, use a separate disposable organisation and fresh invitation for each path. Each smoke deletes its synthetic account and can remove the organisation and remaining invitations. Enter the matching email and token through the smoke process environment.
 
 First smoke the API directly, then smoke through the Netlify proxy by making the web origin the API target:
 

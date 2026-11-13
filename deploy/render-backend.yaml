@@ -1,12 +1,12 @@
 # Prepared only; applying this creates billable API + PostgreSQL resources.
-# Pair with the NEW Smart Training Netlify project, not the original web service.
+# Pair with the dedicated Netlify pilot project.
 services:
   - type: web
     name: smart-training-api
     runtime: node
     plan: starter
     region: virginia
-    autoDeployTrigger: checksPass
+    autoDeployTrigger: "off"
     healthCheckPath: /api/health
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build:api
     preDeployCommand: pnpm --filter api db:bootstrap && pnpm seed
@@ -35,6 +35,7 @@ services:
 databases:
   - name: smart-training-db
     plan: basic-256mb
+    postgresMajorVersion: "16"
     region: virginia
     diskSizeGB: 15
     storageAutoscalingEnabled: true

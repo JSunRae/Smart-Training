@@ -10,6 +10,9 @@ const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
 const apiOrigin = resolveApiOrigin(process.env);
 validateNetlifyDeployment(process.env);
 const siteMode = readSiteMode(process.env);
+const noindex =
+  process.env.NETLIFY === "true" &&
+  (siteMode === "pilot" || process.env.CONTEXT !== "production");
 
 const securityHeaders = [
   {
@@ -52,9 +55,7 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           ...securityHeaders,
-          ...(process.env.NETLIFY === "true" && process.env.CONTEXT !== "production"
-            ? [{ key: "X-Robots-Tag", value: "noindex, nofollow" }]
-            : [])
+          ...(noindex ? [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] : [])
         ]
       }
     ];

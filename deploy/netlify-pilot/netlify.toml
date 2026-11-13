@@ -1,0 +1,22 @@
+# Dedicated pilot project: set its Netlify package directory to deploy/netlify-pilot.
+# The build base remains the repository root.
+[build]
+  command = "pnpm build:web"
+  publish = "apps/web/.next"
+
+[build.environment]
+  NODE_VERSION = "22.18.0"
+  PNPM_VERSION = "9.12.0"
+  NEXT_TELEMETRY_DISABLED = "1"
+  SMART_TRAINING_SITE_MODE = "marketing"
+  NEXT_PUBLIC_SUPPORT_NAME = "Smart Training Pilot Support"
+  NEXT_PUBLIC_SUPPORT_EMAIL = "Jason_C_Rae@Outlook.com"
+
+# Set INTERNAL_API_ORIGIN to the approved HTTPS Render API origin in the
+# dedicated project's production environment.
+[context.production.environment]
+  SMART_TRAINING_SITE_MODE = "pilot"
+
+# The package directory holds configuration. The Next.js app is in apps/web.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

@@ -58,8 +58,8 @@ Do not rely on the local file store in hosted production. If `DATABASE_URL` is m
 2. Before hosted provisioning, obtain approval for the current provider estimate and exact target/scope. The selected Render Hobby workspace does not make compute or storage free.
 3. Push the approved revision and create or sync only [deploy/render-backend.yaml](../deploy/render-backend.yaml) for the selected hybrid topology. Root [render.yaml](../render.yaml) is the all-Render alternative; do not apply both.
 4. Confirm the backend Blueprint provisions:
-   - `smart-training-db`
-   - `smart-training-api`
+   - `smart-training-db` on PostgreSQL 16
+   - `smart-training-api` at the approved revision, with manual deploys
    - API build/start commands: `pnpm build:api` and `pnpm --filter api exec next start --port $PORT`
    - API pre-deploy command: `pnpm --filter api db:bootstrap && pnpm seed`
 5. The API pre-deploy hook runs schema bootstrap and idempotent seed. Record the hook result. For a brand-new or reset database, or a separately authorized workstation preflight, run the explicit commands once against the intended `DATABASE_URL`:
@@ -107,9 +107,9 @@ Do not rely on the local file store in hosted production. If `DATABASE_URL` is m
 
    `GET /api/health` confirms runtime posture only. It does not prove schema bootstrap or seeding.
 
-7. Keep API access closed until the hosted synthetic acceptance window and target are approved. For that window only, set API `PILOT_ACCESS_MODE=invite` and issue a dedicated synthetic invitation. Configure the approved Netlify pilot target with the actual public HTTPS `INTERNAL_API_ORIGIN` for build and function runtime where selectable. Clear `INTERNAL_API_HOSTPORT` and `NEXT_PUBLIC_API_ORIGIN`; Render's private hostname is not reachable from Netlify. Keep the existing conversion site and normal previews in `marketing` mode. Rebuild the approved pilot target with `SMART_TRAINING_SITE_MODE=pilot`; this build setting is separate from API invite authorization.
+7. Keep API access closed until the hosted synthetic acceptance window and target are approved. For that window set API `PILOT_ACCESS_MODE=invite` and issue synthetic invitations. Follow the [dedicated Netlify configuration](DEPLOYMENT_NETLIFY.md#select-the-dedicated-pilot-configuration) and verify the nested config, approved API origin and commit. Netlify selects the frontend mode at build time.
 
-8. Run hosted smoke twice, using a fresh single-use synthetic invitation and matching `SMART_TRAINING_SMOKE_EMAIL` / `SMART_TRAINING_SMOKE_INVITATION_TOKEN` process environment for each run. Issue each invitation through [the operator runbook](PILOT_ACCESS_RUNBOOK.md) against the intended API database. Enter the token at a hidden prompt, not as a command argument or saved script value. The first run targets the API directly; the second targets the web origin to exercise the Netlify proxy:
+8. Run hosted smoke twice, with a separate disposable organisation and fresh single-use synthetic invitation for each path. Issue the invitations through [the operator runbook](PILOT_ACCESS_RUNBOOK.md) against the intended API database. Enter the token at a hidden prompt. The first run targets the API directly. The second targets the web origin to exercise the Netlify proxy.
 
 ```powershell
 $apiUrl = Read-Host 'Enter the approved Render API origin'

@@ -8,7 +8,7 @@ No new domain registration, paid upgrade or API/database resource was created. T
 
 ## Recommendation and verified account facts
 
-Use **training.jasonrae.ai**, served by a **new Smart Training project in the existing `jsunrae` Netlify team**. Start with the branded enquiry website. Enable the training workspace later using the same Next.js frontend, with the existing API and PostgreSQL design on Render.
+Use **training.jasonrae.ai** for enquiries. The first hosted pilot uses the same Next.js frontend in a dedicated Netlify project and the API and PostgreSQL on Render.
 
 Netlify inspection confirmed the team `jasonrae.ai` / `jsunrae` (`69fc9d9eab868e9444e3cd8b`) is on **Free**, with **294.2 / 300 credits remaining before deployment** in the September 7–October 6 billing period. The existing `jasonrae-ai` site (`9532775a-a5d0-4404-9327-2e0d2d2f8290`) has primary URL `https://jasonrae.ai` and a ready deploy. Its build, environment, domain and files were not changed.
 
@@ -21,9 +21,9 @@ The source handoff was read from `AI_Consulting/internal-docs/SMART_TRAINING_WEB
 | Component | Prepared placement | Reason |
 | --- | --- | --- |
 | Branded website and privacy page | Netlify, `apps/web` | Next.js pages, CSS and self-hosted build fonts; no database needed for enquiries |
-| Training frontend | Same Netlify project, later `pilot` mode | Browser requests stay on same-origin `/api/...`; Next.js rewrites to the API |
+| Training frontend | Dedicated Netlify pilot project, `pilot` mode | Browser requests stay on same-origin `/api/...`; Next.js rewrites to the API |
 | Auth, sessions, coaching and storage API | Render Node web service, `apps/api` | Preserves the tested long-running Node/`pg` implementation and operational scripts |
-| PostgreSQL | Render managed Postgres beside the API | Accounts, transcripts and rate limits require durable shared storage |
+| PostgreSQL | Render managed PostgreSQL 16 beside the API | Accounts, transcripts and rate limits require durable shared storage |
 | Local encrypted file store | Local demos only | Serverless local disk is not durable shared storage; production requires Postgres |
 | Optional AI text / voice | Disabled | No model charges are required for the standard deterministic pilot |
 
@@ -33,7 +33,7 @@ Netlify now also offers [managed PostgreSQL](https://docs.netlify.com/build/data
 
 ## Build configuration
 
-Use the root [netlify.toml](../netlify.toml) for **Smart Training only**:
+The existing enquiry project uses the root [netlify.toml](../netlify.toml).
 
 | Setting | Value |
 | --- | --- |
@@ -80,22 +80,27 @@ The mode is fixed at build time. Change it and rebuild; a runtime toggle does no
 
 After backend provisioning and verification, set the approved pilot target's environment `INTERNAL_API_ORIGIN` to the actual public HTTPS Render API origin (build and function runtime scopes where selectable). Copy the actual service URL; do not use the placeholder or Render private hostname. Clear `INTERNAL_API_HOSTPORT` and `NEXT_PUBLIC_API_ORIGIN`. The build rejects missing, local, HTTP, credential-bearing and path-bearing origins. Do not put the Render private hostport or API/database secrets in Netlify.
 
-The current production site at `training.jasonrae.ai` is the enquiry website. Keep its marketing deployment in place until a separate pilot frontend target/build has been explicitly reviewed and approved. Ordinary deploy previews and branch deploys remain marketing mode; they are not a pilot test target. Before using pilot mode, identify the approved Netlify deploy context/site and a non-customer API/Postgres target. A pilot build is not public-release authorization.
+### Select the dedicated pilot configuration
 
-Use the already approved `Jason_C_Rae@Outlook.com` for the pilot application support contact unless it is separately changed through an approved release. Publishing the `training@jasonrae.ai` website alias is a separate gate: confirm current forwarding, inbox access and monitoring ownership, and an exact recoverable source/deploy or tested fix-forward path first. See the [website recovery follow-up](WEBSITE_RELEASE_2026-09-19.md#recovery-follow-up); do not treat one historical delivery receipt as current operational monitoring.
+Once the target and synthetic test window are authorized, use a dedicated Netlify project on its own Netlify hostname. Keep `smart-training-992w` on the root enquiry configuration.
 
-Then add this explicit production override to `netlify.toml` for the approved pilot target and rebuild:
+| Dedicated pilot project setting | Value |
+| --- | --- |
+| Repository and production branch | `JSunRae/Smart-Training` and the approved release branch at the recorded commit |
+| Base directory | Repository root. Leave the field empty. |
+| Package directory | `deploy/netlify-pilot` |
+| Configuration file | [deploy/netlify-pilot/netlify.toml](../deploy/netlify-pilot/netlify.toml) |
+| Build command and publish directory | `pnpm build:web` and `apps/web/.next` |
+| Effective mode | `pilot` in the dedicated project's production context. Previews and other branches build in `marketing` mode. |
+| Production environment | `INTERNAL_API_ORIGIN` set to the approved public HTTPS Render API origin. Leave the Render hostport and public fallback unset. |
 
-```toml
-[context.production.environment]
-  SMART_TRAINING_SITE_MODE = "pilot"
-```
+Netlify looks in the package directory first and uses the repo root for the workspace build. The pilot file explicitly selects the OpenNext adapter because its package directory holds the config while `apps/web` holds the application. Verify the build log shows the nested config, the adapter, the intended commit, and the resolved publish directory. Run the hosted proxy and cookie checks against that deploy. The pilot build sends `X-Robots-Tag: noindex, nofollow`; verify it on the hosted pilot response. [Netlify monorepo configuration](https://docs.netlify.com/build/configure-builds/monorepos/)
 
-The TOML currently fixes the default to `marketing`; merely setting a conflicting dashboard variable will not override file configuration. Keep ordinary previews in marketing mode. The approved pilot context must be explicit in the deploy plan and use a non-customer backend for synthetic acceptance. Do not change the existing marketing production target as a diagnostic step.
+Use `Jason_C_Rae@Outlook.com` for pilot support. The website contact alias follows the [website recovery and forwarding checks](WEBSITE_RELEASE_2026-09-19.md#recovery-follow-up).
 
 For the approved pilot target, requests follow `browser → approved pilot web origin/api/... → public HTTPS Render API → private Render Postgres`. The existing enquiry origin `training.jasonrae.ai` remains in marketing mode unless a separate public release is approved. Cookies are HttpOnly, host-only, SameSite=Lax and Secure in production. The first authorized pilot deployment must prove `Set-Cookie` forwarding, login persistence, logout and deletion. CORS is not needed for this browser path. Do not add wildcard CORS or weaken cookies to make a failed test pass.
 
-For the backend use [deploy/render-backend.yaml](../deploy/render-backend.yaml), which creates only API + Postgres. Keep the original root `render.yaml` as the all-Render alternative; do not apply both to create duplicate services. Current legacy plan names remain supported in [Render Blueprints](https://render.com/docs/compute-plans/). The prepared region remains Virginia to match the original; select the intended region before provisioning if EU storage is required.
+Use [deploy/render-backend.yaml](../deploy/render-backend.yaml) for the hybrid backend. It selects PostgreSQL 16 and manual API deploys. Select the exact approved revision and record the database major version and the API deploy ID. The root `render.yaml` defines the all-Render alternative. The prepared region is Virginia. [Render Blueprint reference](https://render.com/docs/blueprint-spec)
 
 ## Cost before provisioning
 
@@ -120,7 +125,7 @@ USD estimates checked September 19; excludes tax, labour, paid email, extra traf
 2. **Complete:** Linux adapter draft passed route, font/style/script, contact, example/FAQ, desktop/mobile-width and preview-noindex checks. Build Node 22.18.0 and function runtime `nodejs22.x` were verified. Physical iPhone Safari remains untested.
 3. **DNS, custom certificate and conversion promotion complete:** `training.jasonrae.ai` is assigned to the new project, with DNS-only CNAME to `smart-training-992w.netlify.app`. A browser recheck on 2026-09-26 loaded the host over valid HTTPS. Existing apex, `www`, MX/TXT and nameservers were preserved. Production deploy `6ab78c1684f6d6072a619a27` serves the conversion website.
 4. **Production handoff partially complete:** the approved enquiry website, canonical/social metadata, required acknowledgement, downloadable brief and indexing routes are published and checked. A verified safe non-PII record is captured in Netlify's normal submissions collection; notification/delivery still requires confirmation in the configured Netlify destination or a supported mailbox integration. No real contact data or outreach was used.
-5. Only when a hands-on trial is needed, and after the owner has approved the current provider estimate and exact hosted test scope: apply [the backend-only Blueprint](../deploy/render-backend.yaml) to create Render API + Postgres, then use the API pre-deploy bootstrap/seed hook. Select an approved Netlify pilot target, configure the public HTTPS API origin, and build pilot mode. Do not apply root `render.yaml` as well: it is the all-Render alternative and creates an additional web service. Record exact deploys, health, database/bootstrap, smoke, QA, recovery and support evidence in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md). Keep API access closed until the separately authorized synthetic acceptance window; then set `PILOT_ACCESS_MODE=invite` and issue only the dedicated synthetic invitations. Restore `closed` after synthetic acceptance and leave it closed until the final go decision. Only then set `invite` for the approved cohort and separately authorized credential delivery.
+5. When a hands-on trial is needed and the owner has approved spend and scope, follow the [hosted launch worksheet](HOSTED_LAUNCH_WORKSHEET.md) for the dedicated pilot project and Render backend. Record the deploys, database bootstrap and seed, health, smoke, QA, recovery and support results in [PILOT_LAUNCH_RECORD.md](PILOT_LAUNCH_RECORD.md).
 
 For authorized hosted synthetic acceptance, set `SMART_TRAINING_SMOKE_EMAIL` and `SMART_TRAINING_SMOKE_INVITATION_TOKEN` in the smoke process environment. Never put the token in a command line, committed file, or retained log. Each invitation is one-use and the smoke deletes its account, so issue a fresh synthetic invitation for each run. Use the exact approved support email (currently `Jason_C_Rae@Outlook.com` for the pilot; the website `training@` alias has a separate conditional release gate). Follow the secure token-entry example in [PILOT_LAUNCH_RUNBOOK.md](PILOT_LAUNCH_RUNBOOK.md).
 
